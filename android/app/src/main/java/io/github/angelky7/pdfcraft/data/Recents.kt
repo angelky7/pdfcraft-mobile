@@ -110,12 +110,24 @@ class Recents(context: Context) {
 
     fun forget(id: String) {
         fileOf(id).delete()
+        Thumbs.forget(app, id)
         save(list().filterNot { it.id == id })
     }
 
     fun fileOf(id: String): File = File(dir, "$id.pdf")
 
     fun exists(id: String): Boolean = fileOf(id).let { it.isFile && it.length() > 0 }
+
+    /** How much disk one copy takes. Zero when the copy is gone, which the list can show as such. */
+    fun sizeOf(id: String): Long = fileOf(id).let { if (it.isFile) it.length() else 0L }
+
+    /** What the whole shelf costs, for the settings and files screens. */
+    fun totalBytes(): Long = list().sumOf { sizeOf(it.id) }
+
+    /** Drop every copy, keeping the list's bookkeeping consistent. */
+    fun forgetAll() {
+        list().forEach { forget(it.id) }
+    }
 
     private fun save(documents: List<RecentDoc>) {
         val array = JSONArray()

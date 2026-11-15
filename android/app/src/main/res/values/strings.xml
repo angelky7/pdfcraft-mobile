@@ -3,19 +3,123 @@
 <resources>
     <string name="app_name">PdfCraft</string>
 
+    <!-- Tabs -->
+    <string name="tab_home">主页</string>
+    <string name="tab_files">文件</string>
+    <string name="tab_tools">工具</string>
+    <string name="tab_settings">设置</string>
+
     <!-- Home -->
+    <string name="home_greeting">欢迎回来</string>
+    <string name="home_greeting_body">接着上次的页码读，或者打开一份新的文档。</string>
+    <string name="home_what">您想做什么？</string>
+    <string name="home_tab_recent">最近</string>
+    <string name="home_tab_starred">已加星标</string>
+    <string name="home_all_files">全部文件</string>
+    <string name="home_empty_title">还没有打开过文档</string>
+    <string name="home_empty_body">选一份 PDF 开始。打开过的文档会留在这里，下次从上次读到的地方接着读。</string>
+    <string name="home_empty_starred">还没有加星标的文档</string>
+    <string name="home_empty_starred_body">在文档右侧的菜单里点「加星标」，它会出现在这里。</string>
     <string name="home_subtitle">本地阅读 · 手写批注</string>
     <string name="home_lead">在本机阅读 PDF。文件不会离开这台设备，不需要账号，也不会上传任何内容。</string>
     <string name="home_recent">最近打开</string>
-    <string name="home_empty_title">还没有打开过文档</string>
-    <string name="home_empty_body">选一份 PDF 开始。打开过的文档会留在这里，下次从上次读到的地方接着读。</string>
-    <string name="home_privacy">文件只在这台设备上处理：不上传、不需要账号、不联网。</string>
     <string name="home_opening">正在打开…</string>
-    <string name="home_hint">手机与平板通用。从文件管理器、聊天附件或下载目录里选择 PDF 即可。</string>
+    <string name="home_privacy">文件只在这台设备上处理：不上传、不需要账号、不联网。</string>
     <string name="recent_detail">第 %1$d 页 · 共 %2$d 页 · %3$s</string>
+    <string name="unit_pages_read">%1$d/%2$d 页</string>
+
+    <!-- Home shelf -->
+    <string name="tile_open">打开 PDF</string>
+    <string name="tile_ink">手写批注</string>
+    <string name="tile_search">全文搜索</string>
+    <string name="tile_outline">目录</string>
+    <string name="tile_comments">批注</string>
+    <string name="tile_tools">工具</string>
+
+    <!-- Banners -->
+    <string name="banner_local_title">本地优先</string>
+    <string name="banner_local_body">文件不上传、不需要账号、不联网。副本留在应用内，原文件不动。</string>
+    <string name="banner_local_action">选择文件</string>
+    <string name="banner_ink_title">用笔写，用手翻</string>
+    <string name="banner_ink_body">手写笔写字划重点，手指负责滚动和缩放；没有笔时手指也能写。</string>
+    <string name="banner_ink_action">试试批注</string>
+
+    <!-- Files -->
+    <string name="files_title">文件</string>
+    <string name="files_summary">%1$d 份副本 · %2$s</string>
+    <string name="files_on_device">在此设备上</string>
+    <string name="files_empty_body">从系统文件管理器里选一份 PDF，它会复制到应用内并留在这里。</string>
+    <string name="files_other">其他位置</string>
+    <string name="files_browse_title">系统文件管理器</string>
+    <string name="files_browse_body">从下载、聊天附件或云盘里选一份 PDF</string>
+    <string name="files_cloud_title">云端存储</string>
+    <string name="files_cloud_body">未接入：本应用没有网络权限</string>
+    <string name="files_clear">清除全部副本</string>
+    <string name="files_clear_body">删除应用内的副本，原文件不受影响</string>
+    <string name="files_clear_confirm_title">清除本地副本？</string>
+    <string name="files_clear_confirm_body">将删除 %1$d 份副本（%2$s），这些文件的原件不会被改动。此操作无法撤销。</string>
+    <string name="files_footnote">应用内的副本用于记住阅读进度和批注。删除后，原文件仍在原来的位置。</string>
+
+    <!-- Tools -->
+    <string name="tools_title">工具</string>
+    <string name="tools_group_all">全部</string>
+    <string name="tools_group_read">读取</string>
+    <string name="tools_group_edit">编辑</string>
+    <string name="tools_group_convert">转换</string>
+    <string name="tool_read_title">继续阅读</string>
+    <string name="tool_read_body">从上次停下的页码接着读</string>
+    <string name="tool_search_title">全文搜索</string>
+    <string name="tool_search_body">在文档文字里查找，直接跳到命中处</string>
+    <string name="tool_outline_title">目录与书签</string>
+    <string name="tool_outline_body">用文档自己的目录跳转</string>
+    <string name="tool_comments_title">批注列表</string>
+    <string name="tool_comments_body">查看文件里已有的批注和签名</string>
+    <string name="tool_info_title">文档信息</string>
+    <string name="tool_info_body">页数、体积、是否加密</string>
+    <string name="tool_pen_title">手写</string>
+    <string name="tool_pen_body">手写笔写字，压感随力度变化</string>
+    <string name="tool_highlighter_title">荧光笔</string>
+    <string name="tool_highlighter_body">半透明划重点，压在原文字上</string>
+    <string name="tool_rect_title">方框</string>
+    <string name="tool_rect_body">框出一段内容或一个公式</string>
+    <string name="tool_arrow_title">箭头</string>
+    <string name="tool_arrow_body">指向要说的地方</string>
+    <string name="tool_eraser_title">橡皮</string>
+    <string name="tool_eraser_body">擦掉自己画的笔迹</string>
+    <string name="tool_save_title">保存副本</string>
+    <string name="tool_save_body">把笔迹写进 PDF，另存一份</string>
+    <string name="tool_open_title">打开 PDF</string>
+    <string name="tool_open_body">从系统文件选择器导入</string>
+
+    <!-- Settings -->
+    <string name="settings_title">设置</string>
+    <string name="settings_banner_title">本地优先</string>
+    <string name="settings_banner_body">没有账号、没有云端、没有上传。文档只在这台设备上解析和绘制。</string>
+    <string name="settings_storage_value">%1$d 份副本 · %2$s</string>
+    <string name="settings_group_prefs">偏好设置</string>
+    <string name="settings_finger">手指也能书写</string>
+    <string name="settings_finger_body">关闭时手指只翻页，只有手写笔写字</string>
+    <string name="settings_single">单页翻页</string>
+    <string name="settings_single_body">关闭时连续滚动，打开后左右翻页</string>
+    <string name="settings_theme">主题</string>
+    <string name="settings_theme_system">跟随系统</string>
+    <string name="settings_theme_light">浅色</string>
+    <string name="settings_theme_dark">深色</string>
+    <string name="settings_group_about">关于</string>
+    <string name="settings_version">版本</string>
+    <string name="settings_license">开源许可</string>
+    <string name="settings_license_body">PdfCraft 以 MIT 或 Apache-2.0 双许可发布，由你选择。PDF 引擎来自上游项目 storytold/pdfcraft，许可与版权声明随附在仓库的 LICENSE、NOTICE 与 ATTRIBUTION 文件中。</string>
+    <string name="settings_upstream">上游项目</string>
+    <string name="settings_upstream_body">阅读与渲染引擎来自 github.com/storytold/pdfcraft（MIT OR Apache-2.0）。本应用的安卓界面为独立实现。PdfCraft 与 Adobe 无关；Acrobat 是 Adobe Inc. 的商标。</string>
+    <string name="settings_privacy">隐私</string>
+    <string name="settings_privacy_body">应用不申请网络权限：文档不上传、不统计、不采集。导入的副本保存在应用私有目录，卸载即删除。批注只写进你另存的那份文件。</string>
+    <string name="settings_clear">清除本地副本</string>
+    <string name="settings_clear_body">删除应用内保存的全部副本</string>
+    <string name="settings_footnote">PdfCraft 是本地优先的阅读器：没有账号，也没有云端。</string>
 
     <!-- Actions -->
     <string name="action_open">打开 PDF</string>
+    <string name="action_search">搜索</string>
     <string name="action_close">关闭文档</string>
     <string name="action_dismiss">知道了</string>
     <string name="action_more">更多</string>
@@ -23,6 +127,9 @@
     <string name="action_go">跳转</string>
     <string name="action_go_to_page">跳到指定页</string>
     <string name="action_remove_recent">从列表移除</string>
+    <string name="action_remove_all">全部删除</string>
+    <string name="action_star">加星标</string>
+    <string name="action_unstar">取消星标</string>
     <string name="action_undo">撤销一笔</string>
     <string name="action_save">保存副本</string>
     <string name="action_zoom_in">放大</string>
@@ -34,6 +141,15 @@
     <string name="page_number_hint">页码（共 %1$d 页）</string>
     <string name="mode_vertical">连续滚动</string>
     <string name="mode_single">单页翻页</string>
+
+    <!-- Document facts -->
+    <string name="info_title">文档信息</string>
+    <string name="info_file">文件名</string>
+    <string name="info_pages">页数</string>
+    <string name="info_size">大小</string>
+    <string name="info_encrypted">加密</string>
+    <string name="info_yes">是（用密码打开）</string>
+    <string name="info_no">否</string>
 
     <!-- Navigation panel -->
     <string name="panel_toggle">目录与导航</string>

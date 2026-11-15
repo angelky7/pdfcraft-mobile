@@ -139,6 +139,9 @@ private const val MaxZoom = 3.0f
 @Composable
 fun ReaderScreen(
     opened: OpenedDocument,
+    intent: OpenIntent = OpenIntent(),
+    fingerWrites: Boolean = false,
+    singlePage: Boolean = false,
     onProgress: (page: Int, total: Int) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -160,14 +163,16 @@ fun ReaderScreen(
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = start)
     val pagerState = rememberPagerState(initialPage = start) { pages.size }
 
-    var mode by remember { mutableStateOf(ReadMode.Vertical) }
+    var mode by remember { mutableStateOf(if (singlePage) ReadMode.Single else ReadMode.Vertical) }
     var zoom by remember { mutableFloatStateOf(1f) }
-    var writing by remember { mutableStateOf(false) }
-    var tool by remember { mutableStateOf(Tool.Pen) }
+    // A tool shortcut on the home screen arrives here as a tool already in hand.
+    var writing by remember { mutableStateOf(intent.tool != null) }
+    var tool by remember { mutableStateOf(intent.tool ?: Tool.Pen) }
     var penColor by remember { mutableStateOf(PenColors.first().first) }
     var penWidth by remember { mutableFloatStateOf(PenWidths[1].first) }
-    var allowFinger by remember { mutableStateOf(false) }
-    var panelTab by remember { mutableStateOf<NavTab?>(null) }
+    var allowFinger by remember { mutableStateOf(fingerWrites) }
+    var panelTab by remember { mutableStateOf(intent.panel) }
+    var infoOpen by remember { mutableStateOf(intent.info) }
     var menuOpen by remember { mutableStateOf(false) }
     var goToOpen by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
@@ -221,10 +226,18 @@ fun ReaderScreen(
         }
     }
 
+    // "Save a copy" tapped on the tools screen: the sheet opens by itself once the page is up.
+    LaunchedEffect(intent.save) {
+        if (intent.save) {
+            delay(350)
+            savePicker.launch(opened.displayName)
+        }
+    }
+
     Column(Modifier.fillMaxSize().background(PageBackground)) {
         TopAppBar(
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.surface,
+                containerColor = MaterialTheme.colorScheme.background,
                 titleContentColor = MaterialTheme.colorScheme.onSurface,
             ),
             navigationIcon = {
@@ -316,6 +329,13 @@ fun ReaderScreen(
                             onClick = {
                                 menuOpen = false
                                 savePicker.launch(opened.displayName)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.info_title)) },
+                            onClick = {
+                                menuOpen = false
+                                infoOpen = true
                             },
                         )
                     }
@@ -431,6 +451,53 @@ fun ReaderScreen(
                     Text(stringResource(R.string.action_dismiss))
                 }
             },
+        )
+    }
+
+    if (infoOpen) {
+        val bytes = remember(document) {
+            File(context.filesDir, "documents/${opened.id}.pdf").let { if (it.isFile) it.length() else 0L }
+        }
+        val encrypted = remember(document) { runCatching { document.isEncrypted() }.getOrDefault(false) }
+
+        AlertDialog(
+            onDismissRequest = { infoOpen = false },
+            title = { Text(stringResource(R.string.info_title)) },
+            text = {
+                Column {
+                    InfoLine(stringResource(R.string.info_file), opened.displayName)
+                    InfoLine(stringResource(R.string.info_pages), pages.size.toString())
+                    InfoLine(stringResource(R.string.info_size), humanSize(bytes))
+                    InfoLine(
+                        stringResource(R.string.info_encrypted),
+                        stringResource(if (encrypted) R.string.info_yes else R.string.info_no),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { infoOpen = false }) {
+                    Text(stringResource(R.string.action_dismiss))
+                }
+            },
+        )
+    }
+}
+
+/** One fact about the open document, as a label and its value. */
+@Composable
+private fun InfoLine(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(72.dp),
+        )
+        Text(
+            text = value,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
         )
     }
 }

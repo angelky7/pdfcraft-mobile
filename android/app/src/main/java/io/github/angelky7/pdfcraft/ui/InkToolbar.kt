@@ -270,8 +270,8 @@ private fun ToolButton(
  * dozen lines instead of a new set of PNGs at five densities.
  */
 @Composable
-private fun ToolGlyph(tool: Tool, tint: Color) {
-    Canvas(Modifier.size(18.dp)) {
+fun ToolGlyph(tool: Tool, tint: Color, glyphSize: androidx.compose.ui.unit.Dp = 18.dp) {
+    Canvas(Modifier.size(glyphSize)) {
         val w = size.width
         val h = size.height
         val stroke = w * 0.13f

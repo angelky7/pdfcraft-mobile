@@ -4,19 +4,123 @@
 <resources>
     <string name="app_name">PdfCraft</string>
 
+    <!-- Tabs -->
+    <string name="tab_home">Home</string>
+    <string name="tab_files">Files</string>
+    <string name="tab_tools">Tools</string>
+    <string name="tab_settings">Settings</string>
+
     <!-- Home -->
+    <string name="home_greeting">Welcome back</string>
+    <string name="home_greeting_body">Pick up where you stopped, or open something new.</string>
+    <string name="home_what">What would you like to do?</string>
+    <string name="home_tab_recent">Recent</string>
+    <string name="home_tab_starred">Starred</string>
+    <string name="home_all_files">All files</string>
+    <string name="home_empty_title">Nothing opened yet</string>
+    <string name="home_empty_body">Pick a PDF to start. Documents you open stay here, and reopen where you stopped reading.</string>
+    <string name="home_empty_starred">Nothing starred yet</string>
+    <string name="home_empty_starred_body">Use the menu beside a document and choose Star, and it will appear here.</string>
     <string name="home_subtitle">Reads locally · writes with a pen</string>
     <string name="home_lead">Read PDFs on this device. Nothing is uploaded, no account is needed, and the file never leaves the phone.</string>
     <string name="home_recent">Recent</string>
-    <string name="home_empty_title">Nothing opened yet</string>
-    <string name="home_empty_body">Pick a PDF to start. Documents you open stay here, and reopen where you stopped reading.</string>
-    <string name="home_privacy">Everything happens on this device: no upload, no account, no network.</string>
     <string name="home_opening">Opening…</string>
-    <string name="home_hint">Phones and tablets alike. Pick a PDF from a file manager, a chat attachment, or your downloads.</string>
+    <string name="home_privacy">Everything happens on this device: no upload, no account, no network.</string>
     <string name="recent_detail">p. %1$d of %2$d · %3$s</string>
+    <string name="unit_pages_read">%1$d of %2$d pages</string>
+
+    <!-- Home shelf -->
+    <string name="tile_open">Open PDF</string>
+    <string name="tile_ink">Write on it</string>
+    <string name="tile_search">Find text</string>
+    <string name="tile_outline">Contents</string>
+    <string name="tile_comments">Comments</string>
+    <string name="tile_tools">Tools</string>
+
+    <!-- Banners -->
+    <string name="banner_local_title">Local by design</string>
+    <string name="banner_local_body">No upload, no account, no network. The copy stays in the app; your original is untouched.</string>
+    <string name="banner_local_action">Choose a file</string>
+    <string name="banner_ink_title">Write with a pen, turn with a finger</string>
+    <string name="banner_ink_body">The stylus writes and highlights, a finger scrolls and zooms — and a finger can write too when there is no pen.</string>
+    <string name="banner_ink_action">Try a note</string>
+
+    <!-- Files -->
+    <string name="files_title">Files</string>
+    <string name="files_summary">%1$d copies · %2$s</string>
+    <string name="files_on_device">On this device</string>
+    <string name="files_empty_body">Pick a PDF from the system file manager. It is copied into the app and listed here.</string>
+    <string name="files_other">Other locations</string>
+    <string name="files_browse_title">System file manager</string>
+    <string name="files_browse_body">Choose a PDF from downloads, a chat, or a drive</string>
+    <string name="files_cloud_title">Cloud storage</string>
+    <string name="files_cloud_body">Not connected: the app has no network permission</string>
+    <string name="files_clear">Delete all copies</string>
+    <string name="files_clear_body">Removes the copies inside the app; your originals stay put</string>
+    <string name="files_clear_confirm_title">Delete the local copies?</string>
+    <string name="files_clear_confirm_body">This deletes %1$d copies (%2$s). The original files are not touched. It cannot be undone.</string>
+    <string name="files_footnote">The copies exist so the app can remember your page and your ink. Deleting one leaves the original where it was.</string>
+
+    <!-- Tools -->
+    <string name="tools_title">Tools</string>
+    <string name="tools_group_all">All</string>
+    <string name="tools_group_read">Read</string>
+    <string name="tools_group_edit">Edit</string>
+    <string name="tools_group_convert">Convert</string>
+    <string name="tool_read_title">Keep reading</string>
+    <string name="tool_read_body">Continue from the page you stopped on</string>
+    <string name="tool_search_title">Find text</string>
+    <string name="tool_search_body">Search the words and jump to a hit</string>
+    <string name="tool_outline_title">Contents</string>
+    <string name="tool_outline_body">Jump using the document\'s own outline</string>
+    <string name="tool_comments_title">Comments</string>
+    <string name="tool_comments_body">Read the annotations the file arrived with</string>
+    <string name="tool_info_title">Document info</string>
+    <string name="tool_info_body">Pages, size, whether it is encrypted</string>
+    <string name="tool_pen_title">Pen</string>
+    <string name="tool_pen_body">Write with pressure from the stylus</string>
+    <string name="tool_highlighter_title">Highlighter</string>
+    <string name="tool_highlighter_body">Mark a passage without hiding it</string>
+    <string name="tool_rect_title">Box</string>
+    <string name="tool_rect_body">Frame a passage or an equation</string>
+    <string name="tool_arrow_title">Arrow</string>
+    <string name="tool_arrow_body">Point at the thing you mean</string>
+    <string name="tool_eraser_title">Eraser</string>
+    <string name="tool_eraser_body">Rub out ink you drew yourself</string>
+    <string name="tool_save_title">Save a copy</string>
+    <string name="tool_save_body">Write the ink into the PDF and save it elsewhere</string>
+    <string name="tool_open_title">Open a PDF</string>
+    <string name="tool_open_body">Import one with the system picker</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_banner_title">Local by design</string>
+    <string name="settings_banner_body">No account, no cloud, no upload. Documents are parsed and drawn on this device only.</string>
+    <string name="settings_storage_value">%1$d copies · %2$s</string>
+    <string name="settings_group_prefs">Preferences</string>
+    <string name="settings_finger">A finger can write</string>
+    <string name="settings_finger_body">Off: a finger only turns pages, and the stylus does the writing</string>
+    <string name="settings_single">One page at a time</string>
+    <string name="settings_single_body">Off: one continuous column. On: swipe sideways</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_system">Follow the system</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_group_about">About</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_license">Licence</string>
+    <string name="settings_license_body">PdfCraft is released under MIT or Apache-2.0, at your option. The PDF engine comes from the upstream project storytold/pdfcraft; its notices and copyright lines ship with the repository in LICENSE, NOTICE and ATTRIBUTION.</string>
+    <string name="settings_upstream">Upstream</string>
+    <string name="settings_upstream_body">Reading and rendering come from github.com/storytold/pdfcraft (MIT OR Apache-2.0). The Android interface here is an independent implementation. PdfCraft is not affiliated with Adobe; Acrobat is a trademark of Adobe Inc.</string>
+    <string name="settings_privacy">Privacy</string>
+    <string name="settings_privacy_body">The app does not request the network permission: nothing is uploaded, counted or collected. Imported copies live in private app storage and go away when the app is uninstalled. Ink is written only into the copy you save.</string>
+    <string name="settings_clear">Delete local copies</string>
+    <string name="settings_clear_body">Remove every copy the app is holding</string>
+    <string name="settings_footnote">PdfCraft is a local-first reader: no account, no cloud.</string>
 
     <!-- Actions -->
     <string name="action_open">Open a PDF</string>
+    <string name="action_search">Search</string>
     <string name="action_close">Close the document</string>
     <string name="action_dismiss">Close</string>
     <string name="action_more">More</string>
@@ -24,6 +128,9 @@
     <string name="action_go">Go</string>
     <string name="action_go_to_page">Go to page</string>
     <string name="action_remove_recent">Remove from the list</string>
+    <string name="action_remove_all">Delete all</string>
+    <string name="action_star">Star</string>
+    <string name="action_unstar">Remove star</string>
     <string name="action_undo">Undo the last stroke</string>
     <string name="action_save">Save a copy</string>
     <string name="action_zoom_in">Zoom in</string>
@@ -32,9 +139,18 @@
     <!-- Reading -->
     <string name="page_of">Page %1$d of %2$d</string>
     <string name="page_number">Page %1$d</string>
-    <string name="page_number_hint">Page number (of %1$d)</string>
+    <string name="page_number_hint">Page (of %1$d)</string>
     <string name="mode_vertical">Continuous</string>
-    <string name="mode_single">One page at a time</string>
+    <string name="mode_single">One page</string>
+
+    <!-- Document facts -->
+    <string name="info_title">Document info</string>
+    <string name="info_file">File</string>
+    <string name="info_pages">Pages</string>
+    <string name="info_size">Size</string>
+    <string name="info_encrypted">Encrypted</string>
+    <string name="info_yes">Yes (opened with a password)</string>
+    <string name="info_no">No</string>
 
     <!-- Navigation panel -->
     <string name="panel_toggle">Contents and navigation</string>
@@ -43,10 +159,10 @@
     <string name="tab_comments">Comments</string>
     <string name="tab_search">Search</string>
     <string name="outline_empty">This document has no outline</string>
-    <string name="comments_empty">No comments in this document yet</string>
+    <string name="comments_empty">This document has no annotations</string>
     <string name="search_hint">Search the document</string>
     <string name="search_no_results">Nothing found</string>
-    <string name="search_count">%1$d matches</string>
+    <string name="search_count">%1$d hits</string>
 
     <!-- Pen -->
     <string name="pen_toggle">Write on the page</string>
@@ -55,25 +171,25 @@
     <string name="pen_tool_rectangle">Box</string>
     <string name="pen_tool_arrow">Arrow</string>
     <string name="pen_tool_eraser">Eraser</string>
-    <string name="pen_finger_write">Finger writes too</string>
+    <string name="pen_finger_write">A finger can write</string>
     <string name="pen_black">Black</string>
     <string name="pen_red">Red</string>
     <string name="pen_blue">Blue</string>
     <string name="pen_green">Green</string>
     <string name="pen_amber">Amber</string>
-    <string name="pen_thin">Thin</string>
+    <string name="pen_thin">Fine</string>
     <string name="pen_medium">Medium</string>
-    <string name="pen_thick">Thick</string>
-    <string name="pen_zoom_hint">Zoomed in, the page cannot be written on. Go back to 100% first.</string>
+    <string name="pen_thick">Broad</string>
+    <string name="pen_zoom_hint">Zoomed in, writing is off. Return to 100% first.</string>
 
     <!-- Save -->
     <string name="save_title">Save</string>
     <string name="saved_notice">Saved where you chose.</string>
 
     <!-- Errors -->
-    <string name="error_open_title">This file could not be opened</string>
-    <string name="error_cannot_read">The selected file could not be read</string>
-    <string name="error_cannot_write">That location could not be written</string>
-    <string name="error_file_gone">The app no longer has a copy of this document. Pick the file again.</string>
+    <string name="error_open_title">That file will not open</string>
+    <string name="error_cannot_read">The chosen file could not be read</string>
+    <string name="error_cannot_write">That location could not be written to</string>
+    <string name="error_file_gone">The app\'s copy of this document is gone. Choose the file again.</string>
     <string name="untitled_document">Untitled document</string>
 </resources>

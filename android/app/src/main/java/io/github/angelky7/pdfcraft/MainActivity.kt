@@ -5,7 +5,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import io.github.angelky7.pdfcraft.ui.AppRoot
-import io.github.angelky7.pdfcraft.ui.PdfCraftTheme
 
 /**
  * The single activity: everything else is Compose.
@@ -18,9 +17,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            PdfCraftTheme {
-                AppRoot()
-            }
+            AppRoot()
         }
     }
 }
