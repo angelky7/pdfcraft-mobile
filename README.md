@@ -39,19 +39,43 @@ and files never leave the device.
 - 通过系统文件选择器打开 PDF（也可以从其他应用的"打开方式"进入）
 - 连续滚动阅读，按页懒加载、按需渲染，几百页的文档打开也是瞬间
 - 双指缩放（1×–4×），放大后可平移
+- **手写笔书写**：笔在页面上写字，手指照常滚动
 - 平板/大屏：≥ 840 dp 时左侧出现页码侧栏，点击跳转，正文区自动加宽
 - 深色模式跟随系统
 - 界面中文优先（英文备用）
+
+### 手写笔怎么用
+
+| 动作 | 效果 |
+|---|---|
+| 触控笔落在页面上 | 书写，线条粗细随压感变化 |
+| 手指滑动 | 滚动页面（不会被当成书写） |
+| 手掌压在屏幕上 | 笔在书写时忽略，不会把页面滑走 |
+| 笔的侧键 / 笔尾橡皮 | 擦除（划过即删整笔） |
+| 工具栏「撤销」 | 撤销上一笔（可跨页） |
+| 工具栏「保存副本」 | 通过系统选择器另存为新 PDF，原文件不动 |
+
+「笔写字、手指滚动」不是系统功能，而是这个 app 自己判断的：Android 只告诉应用这一笔来自
+触控笔还是手指（`MotionEvent.getToolType`），用什么工具做什么由应用决定。
+
+写入的是**真正的 PDF 墨迹批注**（`/Subtype /Ink`），不是把像素烤进页面。用别的阅读器打开
+保存后的文件，能看到同样的笔迹，也能继续编辑或删除。
+
+三个明确的限制：
+
+- **放大状态下不能写**：缩放是绘制时缩放，笔尖落点和页面坐标会对不上，所以书写只在 100% 时开放
+- **旋转过的页面不能写**：页面裁剪框与显示坐标差一个旋转，映射需要额外推导，暂时直接拒绝而不是画错位置
+- **PDF 里的墨迹是单一线宽**：PDF 的 ink 批注一条只能有一个线宽，屏幕上的压感变化在保存后会被压平为该笔的标称宽度
 
 ## 还不能做什么
 
 这些是明确的待办，不是隐藏的坑：
 
 - 没有文本选择、搜索、目录（书签）面板
-- 没有批注、表单填写、签名
+- 没有高亮、便签、表单填写、签名（手写是唯一的批注）
 - **没有中文 OCR**：引擎自带的光学识别模型只覆盖无重音拉丁字母
 - 没有"最近打开"列表：每次启动从选择文件开始
-- 只有阅读，还不会修改后保存
+- 只能另存副本，不能直接覆盖原文件
 
 ---
 
@@ -141,9 +165,30 @@ instead of depending on what upstream's `main` looks like today.
 - Open a PDF through the system picker, or through another app's "open with"
 - Continuous scrolling with per-page lazy rendering — a 900-page manual opens immediately
 - Pinch to zoom (1×–4×), pan while zoomed
+- **Stylus writing**: the pen writes on the page, a finger keeps scrolling it
 - Tablets: a page rail appears beside the pages at ≥ 840 dp
 - Dark mode follows the system
 - Chinese first, English as the fallback
+
+### How the pen behaves
+
+A stylus stroke is consumed and becomes ink. A finger stroke is not consumed, so it reaches the
+scrolling list underneath. A palm resting on the glass is ignored while the pen is down, and the
+pen's side button is the eraser. This split is the app's decision, not the system's: Android
+reports which tool a touch came from (`MotionEvent.getToolType`); what each tool does is up to the
+app.
+
+What gets written are real PDF ink annotations (`/Subtype /Ink`), not pixels baked into the page,
+so another reader shows the same strokes and can still edit them.
+
+Three limits, stated plainly:
+
+- **No writing while zoomed**: the zoom is a draw-time scale, so the tip and the page coordinates
+  would disagree. Writing is a 1:1 activity here, as on paper.
+- **No writing on rotated pages**: the crop box and the displayed coordinates differ by a rotation,
+  and refusing beats drawing somewhere the tip is not.
+- **One width per annotation in the file**: PDF ink carries a single `/BS /W`, so the pressure
+  variation visible on screen is flattened to the stroke's nominal width on save.
 
 ## What does not
 
