@@ -43,6 +43,7 @@ instead of depending on what upstream's `main` looks like today.
 - Continuous scrolling with per-page lazy rendering — a 900-page manual opens immediately
 - Pinch to zoom (1×–4×), pan while zoomed
 - **Stylus writing**: the pen writes on the page, a finger keeps scrolling it
+- **Navigation panel**: thumbnails, the document's outline, its comments, and full-text search
 - Tablets: a page rail appears beside the pages at ≥ 840 dp
 - Dark mode follows the system
 - Chinese first, English as the fallback
@@ -67,11 +68,26 @@ Three limits, stated plainly:
 - **One width per annotation in the file**: PDF ink carries a single `/BS /W`, so the pressure
   variation visible on screen is flattened to the stroke's nominal width on save.
 
+### The navigation panel
+
+Opened from the menu button in the top bar. All four tabs answer the same question — where do I
+want to be — and all four answer it by going to a page:
+
+| Tab | What it shows |
+|---|---|
+| Pages | Thumbnails, rendered as they scroll into view, the current page marked |
+| Contents | The document's own bookmarks, indented by depth; an entry that leaves the file is shown greyed and is not clickable |
+| Comments | The annotations already in the file, **including the ink this app wrote**, each jumping to its page |
+| Search | The text layer, one row per page with the context around the first match and how many that page holds |
+
+Search runs off the main thread and waits for a pause in typing: re-interpreting the document on
+every keystroke is unusable on a long manual.
+
 ## What does not work yet
 
 Stated as gaps rather than left to be discovered:
 
-- No text selection, search, or outline panel
+- No text selection (search jumps to a page but does not highlight the match on it)
 - No highlights, notes, form filling or signing — the pen is the only annotation
 - **No Chinese OCR**: the bundled recognition model covers unaccented Latin script only
 - No "recently opened" list: each launch starts at the picker
