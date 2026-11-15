@@ -1,0 +1,143 @@
+<p align="center">
+  <img src="docs/banner-en.svg" alt="PdfCraft for Android" width="720">
+</p>
+
+<p align="center">
+  <a href="README.md">中文</a> · <strong>English</strong>
+</p>
+
+A PDF reader for Android phones and tablets, with a stylus that writes on the page. Nothing is
+uploaded, no account is required, and files never leave the device.
+
+---
+
+## What this is
+
+A PDF reader for Android, built on the Rust engine from
+[storytold/pdfcraft](https://github.com/storytold/pdfcraft) with a Kotlin + Jetpack Compose UI
+written for touch screens rather than ported from a desktop window.
+
+### What comes from where
+
+| Part | Origin | Licence |
+|---|---|---|
+| `crates/`, `vendor/`, `xtask/` — parsing, rendering, editing | `storytold/pdfcraft` v0.21.1, unmodified | MIT OR Apache-2.0 |
+| `apps/pdfcraft-mobile/` — the Rust↔Kotlin boundary | this project | MIT OR Apache-2.0 |
+| `android/` — Gradle, Compose UI, Chinese strings, icon | this project | MIT OR Apache-2.0 |
+
+The engine is reused under its licence, with `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE` and
+`ATTRIBUTION.md` kept intact. The Android layer is **not** taken from any third-party port: no
+Kotlin code or UI copy was copied from another project.
+
+### Why the engine is vendored here
+
+Upstream ships a desktop app (egui), a CLI and the web build — no Android layer. Its stable
+surface is the engine API. Pinning the engine in this repository makes a build reproducible
+instead of depending on what upstream's `main` looks like today.
+
+---
+
+## What works
+
+- Open a PDF through the system picker, or through another app's "open with"
+- Continuous scrolling with per-page lazy rendering — a 900-page manual opens immediately
+- Pinch to zoom (1×–4×), pan while zoomed
+- **Stylus writing**: the pen writes on the page, a finger keeps scrolling it
+- Tablets: a page rail appears beside the pages at ≥ 840 dp
+- Dark mode follows the system
+- Chinese first, English as the fallback
+
+### How the pen behaves
+
+A stylus stroke is consumed and becomes ink. A finger stroke is not consumed, so it reaches the
+scrolling list underneath. A palm resting on the glass is ignored while the pen is down, and the
+pen's side button is the eraser. This split is the app's decision, not the system's: Android
+reports which tool a touch came from (`MotionEvent.getToolType`); what each tool does is up to the
+app.
+
+What gets written are real PDF ink annotations (`/Subtype /Ink`), not pixels baked into the page,
+so another reader shows the same strokes and can still edit them.
+
+Three limits, stated plainly:
+
+- **No writing while zoomed**: the zoom is a draw-time scale, so the tip and the page coordinates
+  would disagree. Writing is a 1:1 activity here, as on paper.
+- **No writing on rotated pages**: the crop box and the displayed coordinates differ by a rotation,
+  and refusing beats drawing somewhere the tip is not.
+- **One width per annotation in the file**: PDF ink carries a single `/BS /W`, so the pressure
+  variation visible on screen is flattened to the stroke's nominal width on save.
+
+## What does not work yet
+
+Stated as gaps rather than left to be discovered:
+
+- No text selection, search, or outline panel
+- No highlights, notes, form filling or signing — the pen is the only annotation
+- **No Chinese OCR**: the bundled recognition model covers unaccented Latin script only
+- No "recently opened" list: each launch starts at the picker
+- Save writes a copy; it cannot overwrite the original
+
+---
+
+## Building
+
+JDK 17+, Android SDK 35, NDK 27.2.12479018, Rust stable 1.95+ with the two Android targets
+(`rust-toolchain.toml` declares them), `cargo-ndk`, Gradle 8.11.1.
+
+```bash
+cd android
+gradle assembleRelease -Ppdfcraft.abis=arm64-v8a
+# android/app/build/outputs/apk/release/app-release.apk
+```
+
+One build runs three steps in order:
+
+1. `cargoBuild` — cross-compiles the engine with cargo-ndk into `libpdfcraft_mobile.so` (the slow
+   one)
+2. `generateBindings` — runs UniFFI against that freshly built library, so the Kotlin bindings
+   cannot describe an API the library does not have
+3. Kotlin compiles and the APK is assembled from both
+
+`-Ppdfcraft.abis` takes a comma-separated list (`arm64-v8a,armeabi-v7a,x86_64`).
+
+Signing: set `PDFCRAFT_KEYSTORE` (path), `PDFCRAFT_KEYSTORE_PASSWORD`, `PDFCRAFT_KEY_ALIAS` and
+`PDFCRAFT_KEY_PASSWORD` to sign with a release key. Without them the build falls back to Android's
+debug key — installable, but it cannot upgrade a release-signed install.
+
+### Tests
+
+```bash
+cargo test -p pdfcraft-mobile --lib
+```
+
+These open a real PDF, write ink, save, reopen the file and assert an `Ink` annotation is there.
+An APK cannot prove that, so the tests do.
+
+## Releasing
+
+`.github/workflows/release.yml`:
+
+- A manual run produces an artifact and releases nothing
+- A `v*` tag builds and creates a prerelease
+
+The version lives in `android/gradle.properties` (`pdfcraft.version` / `pdfcraft.versionCode`) and a
+tag that disagrees with it fails the workflow rather than shipping a mismatched build.
+
+Repository secrets, for release signing:
+
+```
+PDFCRAFT_KEYSTORE_BASE64     # base64 of the keystore
+PDFCRAFT_KEYSTORE_PASSWORD
+PDFCRAFT_KEY_ALIAS
+PDFCRAFT_KEY_PASSWORD
+```
+
+## Licence and credit
+
+MIT OR Apache-2.0, as upstream.
+
+- All credit for the engine and the document handling goes to
+  [storytold/pdfcraft](https://github.com/storytold/pdfcraft) and its contributors.
+- Full copyright and third-party notices are in `NOTICE`, `ATTRIBUTION.md` and `LICENSES.toml`.
+- "PdfCraft" is the upstream project's name. This is an unofficial Android front end and is not
+  affiliated with that project.
