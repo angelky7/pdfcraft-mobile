@@ -133,6 +133,19 @@ jobs:
           set -euo pipefail
           apk="android/app/build/outputs/apk/release/app-release.apk"
           test -f "$apk"
+
+          # A build can succeed and still ship no engine: the library is generated, and a
+          # source set that does not point at it produces an APK that installs and then fails
+          # to link on the first call. Check the artifact, not the build log.
+          for lib in android/app/build/rustJniLibs/*/libpdfcraft_mobile.so; do
+            abi="$(basename "$(dirname "$lib")")"
+            if ! unzip -l "$apk" | grep -q "lib/$abi/libpdfcraft_mobile.so"; then
+              echo "::error::the APK is missing lib/$abi/libpdfcraft_mobile.so"
+              exit 1
+            fi
+            echo "engine library present for $abi"
+          done
+
           apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)"
           "$apksigner" verify --print-certs "$apk"
           mkdir -p dist

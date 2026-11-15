@@ -152,6 +152,9 @@ android {
         // The generated bindings are sources like any other; the directory only exists after
         // generateBindings has run, which the Kotlin compile depends on below.
         kotlin.srcDir(bindingsDir)
+        // cargo-ndk writes <dir>/<abi>/libpdfcraft_mobile.so, which is exactly a jniLibs source:
+        // without this the APK ships no engine at all and every call fails to link.
+        jniLibs.srcDir(jniLibsDir)
     }
 
     compileOptions {
