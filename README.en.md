@@ -39,34 +39,61 @@ instead of depending on what upstream's `main` looks like today.
 
 ## What works
 
-- Open a PDF through the system picker, or through another app's "open with"
-- Continuous scrolling with per-page lazy rendering — a 900-page manual opens immediately
-- Pinch to zoom (1×–4×), pan while zoomed
-- **Stylus writing**: the pen writes on the page, a finger keeps scrolling it
-- **Navigation panel**: thumbnails, the document's outline, its comments, and full-text search
-- Tablets: a page rail appears beside the pages at ≥ 840 dp
-- Dark mode follows the system
-- Chinese first, English as the fallback
+- Open a PDF from the system picker; the app **remembers the last eight**, and reopens each where
+  you stopped reading
+- Continuous scrolling or one page at a time; pages render as they are reached, so a 900-page
+  manual opens immediately
+- Pinch to zoom (1x–3x), double-tap to zoom, drag the bar at the bottom to move through the
+  document, or type a page number
+- **Writing and marking**: pen, highlighter, box, arrow, eraser — the line follows the pressure
+- **A finger writes too**, for tablets that have no pen
+- **Writing works while zoomed in**, because the tip and the page agree on where the ink goes
+- **Annotations already in the file are drawn**: the highlights, underlines, strike-throughs,
+  boxes and notes somebody added in Acrobat
+- **Navigation panel**: thumbnails, the document's outline, its comments, full-text search
+- Tablets: two-column layout and a page rail at 840 dp and wider
+- Dark mode follows the system; Chinese first, English second
 
-### How the pen behaves
+### Writing and marking
 
-A stylus stroke is consumed and becomes ink. A finger stroke is not consumed, so it reaches the
-scrolling list underneath. A palm resting on the glass is ignored while the pen is down, and the
-pen's side button is the eraser. This split is the app's decision, not the system's: Android
-reports which tool a touch came from (`MotionEvent.getToolType`); what each tool does is up to the
-app.
+| Gesture | What happens |
+|---|---|
+| A stylus touches the page | Writes; the line thickens and thins with pressure |
+| A finger drags (finger writing off) | Scrolls the page |
+| A finger touches the page (finger writing on) | Writes |
+| Two fingers | Zooms, including while writing |
+| A palm rests on the glass | Ignored while a mark is being drawn, so it cannot scroll the page away |
+| The stylus's side button, its tail, or the eraser tool | Erases what it passes over |
+| Undo | Takes back the last mark, on any page |
+| Save a copy | Writes a new PDF wherever you choose; the original is untouched |
 
-What gets written are real PDF ink annotations (`/Subtype /Ink`), not pixels baked into the page,
-so another reader shows the same strokes and can still edit them.
+Five tools: **pen**, **highlighter** (38% and three times as wide, so the words show through),
+**box**, **arrow** (which grows as you drag it), and the **eraser**.
 
-Three limits, stated plainly:
+The stylus-versus-finger split is the app's decision, not the system's: Android reports which tool
+a touch came from (`MotionEvent.getToolType`); what each tool does is up to the app. That is why
+"a finger writes too" is a switch rather than a different device.
 
-- **No writing while zoomed**: the zoom is a draw-time scale, so the tip and the page coordinates
-  would disagree. Writing is a 1:1 activity here, as on paper.
-- **No writing on rotated pages**: the crop box and the displayed coordinates differ by a rotation,
-  and refusing beats drawing somewhere the tip is not.
+What gets written are real PDF annotations, not pixels baked into the page:
+
+| Tool | What lands in the file |
+|---|---|
+| Pen | `/Subtype /Ink` |
+| Highlighter | Highlight-intent ink (`/IT /FreehandHighlight`) |
+| Box | `/Subtype /Square` |
+| Arrow | `/Subtype /Line`, open arrowhead at the end |
+
+Another reader shows the same marks and can still edit them.
+
+Stated plainly:
+
+- **No writing on rotated pages**: the crop box and the displayed coordinates differ by a
+  rotation, and refusing beats drawing somewhere the tip is not.
 - **One width per annotation in the file**: PDF ink carries a single `/BS /W`, so the pressure
   variation visible on screen is flattened to the stroke's nominal width on save.
+- **The deepest zoom is slightly soft**: rendering has a resolution ceiling (a bitmap over about
+  40 MB is more than a phone will give this app), past which the raster is scaled rather than
+  re-rendered.
 
 ### The navigation panel
 
@@ -85,15 +112,12 @@ every keystroke is unusable on a long manual.
 
 ## What does not work yet
 
-Stated as gaps rather than left to be discovered:
-
 - No text selection (search jumps to a page but does not highlight the match on it)
-- No highlights, notes, form filling or signing — the pen is the only annotation
-- **No Chinese OCR**: the bundled recognition model covers unaccented Latin script only
-- No "recently opened" list: each launch starts at the picker
-- Save writes a copy; it cannot overwrite the original
-
----
+- The highlighter is freehand, **not "select a passage and highlight it"** — PDF's `/Highlight`
+  with `/QuadPoints` is not wired up
+- No note icons, text boxes, form fields, or signing
+- **No Chinese OCR**: the engine's optical model covers unaccented Latin script only
+- Save a copy only; the original is never overwritten
 
 ## Building
 
