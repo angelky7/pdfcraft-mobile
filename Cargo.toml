@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "apps/*", "xtask"]
+members = ["crates/*", "apps/*", "apps/pdfcraft-mobile/bindgen", "xtask"]
 exclude = ["vendor"]
 default-members = ["crates/*", "apps/pdfcraft-mobile", "xtask"]
 

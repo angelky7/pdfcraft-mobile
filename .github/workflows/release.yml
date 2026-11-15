@@ -139,6 +139,17 @@ jobs:
           cp "$apk" "dist/pdfcraft-${PDFCRAFT_ABIS}-${{ steps.v.outputs.version }}.apk"
           ls -l dist
 
+      # cargo resolves the workspace's own lock file during the build; this hands that result
+      # back so it can be committed and the resolution pinned.
+      - name: Capture Cargo.lock
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cargo.lock
+          path: Cargo.lock
+          if-no-files-found: warn
+          overwrite: true
+
       - uses: actions/upload-artifact@v4
         with:
           name: apk
