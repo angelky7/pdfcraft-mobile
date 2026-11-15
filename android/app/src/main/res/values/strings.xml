@@ -50,6 +50,9 @@
     <!-- Pen -->
     <string name="pen_toggle">手写批注</string>
     <string name="pen_tool_ink">笔</string>
+    <string name="pen_tool_highlighter">荧光笔</string>
+    <string name="pen_tool_rectangle">方框</string>
+    <string name="pen_tool_arrow">箭头</string>
     <string name="pen_tool_eraser">橡皮</string>
     <string name="pen_finger_write">手指也能写</string>
     <string name="pen_black">黑色</string>

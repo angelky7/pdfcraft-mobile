@@ -51,6 +51,9 @@
     <!-- Pen -->
     <string name="pen_toggle">Write on the page</string>
     <string name="pen_tool_ink">Pen</string>
+    <string name="pen_tool_highlighter">Highlighter</string>
+    <string name="pen_tool_rectangle">Box</string>
+    <string name="pen_tool_arrow">Arrow</string>
     <string name="pen_tool_eraser">Eraser</string>
     <string name="pen_finger_write">Finger writes too</string>
     <string name="pen_black">Black</string>

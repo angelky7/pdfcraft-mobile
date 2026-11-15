@@ -1,6 +1,7 @@
 package io.github.angelky7.pdfcraft.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,22 +20,25 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
@@ -44,7 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.angelky7.pdfcraft.R
-import io.github.angelky7.pdfcraft.ink.PenTool
+import io.github.angelky7.pdfcraft.ink.Tool
 
 /** The inks on offer, each with the name spoken by a screen reader. */
 val PenColors = listOf(
@@ -54,29 +58,37 @@ val PenColors = listOf(
     Color(0xFF2C6A55) to R.string.pen_green,
 )
 
-/** Nominal widths in points: a fine pen, a marker, and a highlighter-ish broad nib. */
+/** Nominal widths in points: a fine pen, a marker, and a broad nib. */
 val PenWidths = listOf(
     1.2f to R.string.pen_thin,
     2.6f to R.string.pen_medium,
     5.2f to R.string.pen_thick,
 )
 
+/** The tools, in the order they appear: what draws, then what removes. */
+private val Tools = listOf(
+    Tool.Pen to R.string.pen_tool_ink,
+    Tool.Highlighter to R.string.pen_tool_highlighter,
+    Tool.Rectangle to R.string.pen_tool_rectangle,
+    Tool.Arrow to R.string.pen_tool_arrow,
+    Tool.Eraser to R.string.pen_tool_eraser,
+)
+
 /**
- * The writing controls.
+ * The drawing controls.
  *
- * Two rows: what marks the page, then what happens to the marks. It floats over the bottom of the
- * page rather than taking a strip of its own, so turning writing on does not shrink the document
- * being read — and it scrolls sideways rather than wrapping, because a narrow phone should show
- * every choice at its natural size instead of shrinking them below a fingertip.
+ * Two rows: what draws, then how it draws. It floats over the bottom of the page rather than
+ * taking a strip of its own, so turning drawing on does not shrink the document — and it scrolls
+ * sideways rather than shrinking, because a control smaller than a fingertip is not a control.
  */
 @Composable
 fun InkToolbar(
+    tool: Tool,
+    onTool: (Tool) -> Unit,
     color: Color,
     onColor: (Color) -> Unit,
     width: Float,
     onWidth: (Float) -> Unit,
-    tool: PenTool,
-    onTool: (PenTool) -> Unit,
     allowFinger: Boolean,
     onAllowFinger: (Boolean) -> Unit,
     canUndo: Boolean,
@@ -86,35 +98,33 @@ fun InkToolbar(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = modifier.widthIn(max = 520.dp),
+        modifier = modifier.widthIn(max = 560.dp),
         shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 3.dp,
         shadowElevation = 10.dp,
     ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                ToolButton(
-                    selected = tool == PenTool.Ink,
-                    label = stringResource(R.string.pen_tool_ink),
-                    icon = { tint -> Icon(Icons.Filled.Edit, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp)) },
-                    onClick = { onTool(PenTool.Ink) },
-                )
-                ToolButton(
-                    selected = tool == PenTool.Eraser,
-                    label = stringResource(R.string.pen_tool_eraser),
-                    icon = null,
-                    onClick = { onTool(PenTool.Eraser) },
-                )
+                Tools.forEach { (candidate, name) ->
+                    val label = stringResource(name)
+                    ToolButton(
+                        selected = tool == candidate,
+                        label = label,
+                        onClick = { onTool(candidate) },
+                    ) {
+                        ToolGlyph(candidate, it)
+                    }
+                }
 
                 Separator()
 
                 PenColors.forEach { (swatch, name) ->
-                    val chosen = swatch == color && tool == PenTool.Ink
+                    val chosen = swatch == color
                     val label = stringResource(name)
                     val ring by animateColorAsState(
                         if (chosen) MaterialTheme.colorScheme.onSurface else Color.Transparent,
@@ -122,28 +132,27 @@ fun InkToolbar(
                     )
                     Box(
                         Modifier
-                            .size(36.dp)
+                            .size(34.dp)
                             .clip(CircleShape)
-                            .clickable {
-                                onColor(swatch)
-                                onTool(PenTool.Ink)
-                            }
+                            .clickable { onColor(swatch) }
                             .semantics { contentDescription = label },
                         contentAlignment = Alignment.Center,
                     ) {
                         Box(
                             Modifier
-                                .size(22.dp)
+                                .size(21.dp)
                                 .background(swatch, CircleShape)
                                 .border(2.dp, ring, CircleShape),
                         )
                     }
                 }
+            }
 
-                Separator()
+            Spacer(Modifier.height(6.dp))
 
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 PenWidths.forEach { (size, name) ->
-                    val chosen = size == width
+                    val chosen = kotlin.math.abs(size - width) < 0.01f
                     val label = stringResource(name)
                     val background by animateColorAsState(
                         if (chosen) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
@@ -151,27 +160,22 @@ fun InkToolbar(
                     )
                     Box(
                         modifier = Modifier
-                            .size(34.dp)
+                            .size(32.dp)
                             .background(background, CircleShape)
-                            .clickable {
-                                onWidth(size)
-                                onTool(PenTool.Ink)
-                            }
+                            .clickable { onWidth(size) }
                             .semantics { contentDescription = label },
                         contentAlignment = Alignment.Center,
                     ) {
                         Box(
                             Modifier
-                                .size((size * 2.6f).dp.coerceIn(3.dp, 14.dp))
-                                .background(if (tool == PenTool.Eraser) MaterialTheme.colorScheme.outline else color, CircleShape),
+                                .size((size * 2.4f).dp.coerceIn(3.dp, 13.dp))
+                                .background(MaterialTheme.colorScheme.onSurfaceVariant, CircleShape),
                         )
                     }
                 }
-            }
 
-            Spacer(Modifier.height(8.dp))
+                Separator()
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
                 val fingerLabel = stringResource(R.string.pen_finger_write)
                 val fingerBackground by animateColorAsState(
                     if (allowFinger) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
@@ -185,28 +189,20 @@ fun InkToolbar(
                         .padding(horizontal = 8.dp, vertical = 6.dp)
                         .semantics { contentDescription = fingerLabel },
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
+                    val tint = if (allowFinger) {
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
                     Icon(
                         Icons.Filled.TouchApp,
                         contentDescription = null,
-                        tint = if (allowFinger) {
-                            MaterialTheme.colorScheme.onSecondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        modifier = Modifier.size(16.dp),
+                        tint = tint,
+                        modifier = Modifier.size(15.dp),
                     )
-                    Text(
-                        text = fingerLabel,
-                        fontSize = 12.sp,
-                        fontWeight = if (allowFinger) FontWeight.Medium else FontWeight.Normal,
-                        color = if (allowFinger) {
-                            MaterialTheme.colorScheme.onSecondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
+                    Text(text = fingerLabel, fontSize = 11.sp, color = tint)
                 }
 
                 Spacer(Modifier.weight(1f))
@@ -219,7 +215,7 @@ fun InkToolbar(
                     Icon(Icons.Filled.Undo, contentDescription = null, modifier = Modifier.size(19.dp))
                 }
 
-                Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.width(2.dp))
 
                 ActionButton(
                     enabled = !saving,
@@ -243,8 +239,8 @@ fun InkToolbar(
 private fun ToolButton(
     selected: Boolean,
     label: String,
-    icon: (@Composable (Color) -> Unit)?,
     onClick: () -> Unit,
+    glyph: @Composable (Color) -> Unit,
 ) {
     val background by animateColorAsState(
         if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
@@ -256,46 +252,68 @@ private fun ToolButton(
         MaterialTheme.colorScheme.onSurfaceVariant
     }
 
-    Row(
+    Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
+            .size(40.dp)
+            .clip(RoundedCornerShape(11.dp))
             .background(background)
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 7.dp)
             .semantics { contentDescription = label },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        if (icon != null) {
-            icon(tint)
-        } else {
-            EraserGlyph(tint)
-        }
-        Text(text = label, fontSize = 12.sp, color = tint, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
+        glyph(tint)
     }
 }
 
-/** An eraser: a tilted block with a lighter tip. Drawn rather than shipped as an asset. */
+/**
+ * The tool marks, drawn rather than shipped as assets: five small shapes, so a new tool costs a
+ * dozen lines instead of a new set of PNGs at five densities.
+ */
 @Composable
-private fun EraserGlyph(tint: Color) {
-    androidx.compose.foundation.Canvas(Modifier.size(18.dp)) {
+private fun ToolGlyph(tool: Tool, tint: Color) {
+    Canvas(Modifier.size(18.dp)) {
         val w = size.width
         val h = size.height
-        val body = androidx.compose.ui.graphics.Path().apply {
-            moveTo(w * 0.30f, h * 0.86f)
-            lineTo(w * 0.08f, h * 0.62f)
-            lineTo(w * 0.60f, h * 0.14f)
-            lineTo(w * 0.90f, h * 0.44f)
-            close()
+        val stroke = w * 0.13f
+
+        when (tool) {
+            Tool.Pen -> {
+                // A nib: the shaft, then the point.
+                drawLine(tint, Offset(w * 0.22f, h * 0.78f), Offset(w * 0.74f, h * 0.26f), stroke, StrokeCap.Round)
+                drawLine(tint, Offset(w * 0.22f, h * 0.78f), Offset(w * 0.30f, h * 0.86f), stroke * 0.8f, StrokeCap.Round)
+            }
+
+            Tool.Highlighter -> {
+                // A broad band, with the tip under it.
+                drawLine(tint, Offset(w * 0.16f, h * 0.42f), Offset(w * 0.84f, h * 0.42f), h * 0.30f, StrokeCap.Round)
+                drawLine(tint, Offset(w * 0.30f, h * 0.78f), Offset(w * 0.70f, h * 0.78f), stroke * 0.8f, StrokeCap.Round)
+            }
+
+            Tool.Rectangle -> drawRect(
+                color = tint,
+                topLeft = Offset(w * 0.16f, h * 0.22f),
+                size = Size(w * 0.68f, h * 0.56f),
+                style = Stroke(width = stroke),
+            )
+
+            Tool.Arrow -> {
+                drawLine(tint, Offset(w * 0.16f, h * 0.82f), Offset(w * 0.78f, h * 0.24f), stroke, StrokeCap.Round)
+                drawLine(tint, Offset(w * 0.78f, h * 0.24f), Offset(w * 0.50f, h * 0.28f), stroke, StrokeCap.Round)
+                drawLine(tint, Offset(w * 0.78f, h * 0.24f), Offset(w * 0.74f, h * 0.52f), stroke, StrokeCap.Round)
+            }
+
+            Tool.Eraser -> {
+                val body = Path().apply {
+                    moveTo(w * 0.30f, h * 0.84f)
+                    lineTo(w * 0.10f, h * 0.60f)
+                    lineTo(w * 0.60f, h * 0.14f)
+                    lineTo(w * 0.88f, h * 0.42f)
+                    close()
+                }
+                drawPath(body, tint, style = Stroke(width = stroke, cap = StrokeCap.Round))
+                drawLine(tint, Offset(w * 0.22f, h * 0.70f), Offset(w * 0.50f, h * 0.40f), stroke, StrokeCap.Round)
+            }
         }
-        drawPath(body, tint, style = Stroke(width = w * 0.09f, cap = StrokeCap.Round))
-        drawLine(
-            color = tint,
-            start = Offset(w * 0.22f, h * 0.72f),
-            end = Offset(w * 0.50f, h * 0.42f),
-            strokeWidth = w * 0.09f,
-            cap = StrokeCap.Round,
-        )
     }
 }
 
@@ -304,14 +322,14 @@ private fun EraserGlyph(tint: Color) {
 private fun Separator() {
     Box(
         Modifier
-            .padding(horizontal = 2.dp)
+            .padding(horizontal = 4.dp)
             .width(1.dp)
             .height(20.dp)
             .background(MaterialTheme.colorScheme.surfaceVariant),
     )
 }
 
-/** Undo and save: the two things that happen to the ink rather than to the pen. */
+/** Undo and save: the two things that happen to the marks rather than to the pen. */
 @Composable
 private fun ActionButton(
     enabled: Boolean,
@@ -333,8 +351,6 @@ private fun ActionButton(
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        androidx.compose.runtime.CompositionLocalProvider(
-            androidx.compose.material3.LocalContentColor provides tint,
-        ) { content() }
+        CompositionLocalProvider(LocalContentColor provides tint) { content() }
     }
 }

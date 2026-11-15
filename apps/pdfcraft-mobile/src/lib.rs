@@ -21,7 +21,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use pdfcraft_annot::{NewAnnotation, Shape, Style};
+use pdfcraft_annot::{LineEnding, NewAnnotation, Shape, Style};
 use pdfcraft_engine::{Edit, Session};
 use pdfcraft_render::{OpenError, PageRenderer, RenderConfig, RenderRequest, RequestKind, inspect};
 
@@ -59,15 +59,35 @@ pub enum MobileError {
     Edit { detail: String },
 }
 
-/// One pen stroke, ready to become part of an ink annotation.
+/// What a mark is: which annotation the engine is asked to write.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum MarkKind {
+    /// Freehand strokes in the pen's colour, opaque.
+    Ink,
+    /// Freehand strokes that let the page show through, written as a highlight-intent ink so a
+    /// reader that only knows `/Ink` still shows it.
+    Highlighter,
+    /// A rectangle drawn between the first two points.
+    Rectangle,
+    /// A line from the first point to the second, arrowheaded at the second.
+    Arrow,
+}
+
+/// One thing drawn on a page.
 ///
 /// Points are normalised to the page as the reader displays it: `0..1` from the left edge, and
 /// `0..1` from the *top* edge downward, which is how a touch screen reports them. Converting to
 /// PDF user space (origin bottom-left, y up, offset by the page's crop box) happens here, so the
 /// Kotlin side never has to know that PDF's y axis runs the other way.
+///
+/// Widths stay in points for the same reason the coordinates are normalised: they describe the
+/// mark, not the screen showing it.
 #[derive(Clone, Debug, uniffi::Record)]
-pub struct InkStroke {
-    /// Flattened x,y pairs, all in `0..1`. A trailing value with no partner is ignored.
+pub struct Mark {
+    pub kind: MarkKind,
+    /// Flattened x,y pairs. Strokes use as many as were sampled; a rectangle and an arrow use the
+    /// first two, as two opposite corners / the two ends. A trailing value with no partner and
+    /// anything that is not a finite number is ignored.
     pub points: Vec<f32>,
     /// Colour as `0xAARRGGBB`. Alpha becomes the annotation's opacity: PDF ink has no alpha.
     pub color: i32,
@@ -95,6 +115,16 @@ pub struct AnnotationRow {
     pub subtype: String,
     /// The comment's text, empty when it has none.
     pub contents: String,
+    /// The author the file records, empty when it records none.
+    pub author: String,
+    /// Colour as `0xAARRGGBB`, fully opaque when the file gives none.
+    pub color: i32,
+    /// The annotation's rectangle, normalised like a mark's points: x0, y0, x1, y1.
+    pub rect: Vec<f32>,
+    /// Text-markup quads, normalised, eight numbers each (four corners).
+    pub quads: Vec<f32>,
+    /// A line's, polygon's or callout's vertices, normalised x,y pairs; empty for other subtypes.
+    pub points: Vec<f32>,
 }
 
 /// A page that contains the search term, with the text around the first match on it.
@@ -107,12 +137,12 @@ pub struct SearchHit {
     pub count: i32,
 }
 
-/// Everything written on one page.
+/// Everything drawn on one page.
 #[derive(Clone, Debug, uniffi::Record)]
-pub struct PageInk {
+pub struct PageMark {
     /// 0-based page index.
     pub page: i32,
-    pub strokes: Vec<InkStroke>,
+    pub marks: Vec<Mark>,
 }
 
 /// A page's displayed geometry, which is what the reader needs to lay pages out.
@@ -188,10 +218,38 @@ impl Document {
         let annotations = info
             .annotations
             .iter()
-            .map(|a| AnnotationRow {
-                page: a.page as i32,
-                subtype: a.subtype.clone(),
-                contents: a.contents.clone().unwrap_or_default(),
+            .map(|a| {
+                // A rectangle and a quad are both in user space; the panel draws in the space the
+                // page is displayed in, which is why everything crossing the boundary is
+                // normalised here rather than in Kotlin.
+                let crop = info.pages.get(a.page).map(|p| p.crop).unwrap_or([0.0, 0.0, 612.0, 792.0]);
+                AnnotationRow {
+                    page: a.page as i32,
+                    subtype: a.subtype.clone(),
+                    contents: a.contents.clone().unwrap_or_default(),
+                    author: a.author.clone().unwrap_or_default(),
+                    color: argb_of(a.color),
+                    rect: vec![
+                        norm_x(a.rect[0], crop),
+                        norm_y(a.rect[3], crop),
+                        norm_x(a.rect[2], crop),
+                        norm_y(a.rect[1], crop),
+                    ],
+                    quads: a
+                        .quads
+                        .iter()
+                        .flat_map(|q| {
+                            q.chunks_exact(2)
+                                .flat_map(|p| [norm_x(p[0], crop), norm_y(p[1], crop)])
+                                .collect::<Vec<f32>>()
+                        })
+                        .collect(),
+                    points: a
+                        .points
+                        .iter()
+                        .flat_map(|p| [norm_x(p[0], crop), norm_y(p[1], crop)])
+                        .collect(),
+                }
             })
             .collect();
 
@@ -385,85 +443,129 @@ impl Document {
         sx.min(sy).max(0.01)
     }
 
-    /// Write the document, with the given ink, to `path`. Returns the number of bytes written.
+    /// Write the document, with the given marks, to `path`. Returns the number of bytes written.
     ///
-    /// The strokes arrive as an argument rather than being remembered as edits, and the save
-    /// replays them onto the file as it was opened. That is what keeps the file honest: the app's
-    /// ink model is the source of truth, so a stroke that was undone or erased is one that is
-    /// simply not in the list, and what is written cannot drift from what is on screen.
+    /// The marks arrive as an argument rather than being remembered as edits, and the save replays
+    /// them onto the file as it was opened. That is what keeps the file honest: the app's model is
+    /// the source of truth, so a mark that was undone or erased is one that is simply not in the
+    /// list, and what is written cannot drift from what is on screen.
     ///
-    /// Strokes are grouped per page by colour and width, because an ink annotation carries one of
-    /// each: a page written with a single pen becomes a single annotation.
-    pub fn save_with_ink(&self, path: String, ink: Vec<PageInk>) -> Result<i64, MobileError> {
+    /// Strokes are grouped per page by kind, colour and width, because an ink annotation carries
+    /// one of each: a page written with a single pen becomes a single annotation rather than a
+    /// thousand. Rectangles and arrows are one object each, because they are one each.
+    pub fn save_with_marks(&self, path: String, pages: Vec<PageMark>) -> Result<i64, MobileError> {
         let mut session = Session::new();
         let id = session
             .open("document.pdf", None, self.original.clone(), self.password.as_deref())
             .map_err(open_error)?;
 
         let count = self.pages.len() as i32;
-        for page_ink in &ink {
-            let index = page_ink.page;
+        for page_marks in &pages {
+            let index = page_marks.page;
             if index < 0 || index >= count {
                 return Err(MobileError::NoSuchPage { page: index, count });
             }
             let page = index as usize;
-            // The crop box is in user space and the stroke coordinates are in the rotated space
-            // the reader shows; mapping one onto the other has to undo the rotation. Refusing is
+            // The crop box is in user space and the mark's coordinates are in the space the
+            // reader shows; mapping one onto the other has to undo the rotation. Refusing is
             // better than drawing in the wrong place and calling it saved.
             if self.pages[page].rotation != 0 {
                 return Err(MobileError::Edit { detail: "a rotated page cannot be written on yet".into() });
             }
 
-            let [x0, y0, x1, y1] = self.crops[page];
-            let crop_width = f64::from(x1 - x0);
-            let crop_height = f64::from(y1 - y0);
+            let crop = self.crops[page];
 
-            // (colour, width in quarter points) → the strokes drawn with it. Quantising the width
-            // keeps a slider that moved by a rounding error from splitting one page in two.
-            let mut groups: Vec<(i32, i32, Vec<Vec<[f64; 2]>>)> = Vec::new();
-            for stroke in &page_ink.strokes {
-                let mut points: Vec<[f64; 2]> = Vec::with_capacity(stroke.points.len() / 2);
-                for pair in stroke.points.chunks_exact(2) {
-                    let (nx, ny) = (pair[0], pair[1]);
-                    if !nx.is_finite() || !ny.is_finite() {
-                        continue;
+            // (kind, colour, width in quarter points) → the strokes drawn with it. Quantising the
+            // width keeps a slider that moved by a rounding error from splitting one page in two.
+            let mut freehand: Vec<(MarkKind, i32, i32, Vec<Vec<[f64; 2]>>)> = Vec::new();
+            let mut shapes: Vec<(Shape, Style, String)> = Vec::new();
+
+            for mark in &page_marks.marks {
+                let points = to_user(&mark.points, crop);
+                match mark.kind {
+                    MarkKind::Ink | MarkKind::Highlighter => {
+                        // One point is a tap, which ink cannot express; two are a stroke.
+                        if points.len() < 2 {
+                            continue;
+                        }
+                        let quarter = (f64::from(mark.width).clamp(0.1, 40.0) * 4.0).round() as i32;
+                        match freehand
+                            .iter_mut()
+                            .find(|(k, c, w, _)| *k == mark.kind && *c == mark.color && *w == quarter)
+                        {
+                            Some((_, _, _, paths)) => paths.push(points),
+                            None => freehand.push((mark.kind, mark.color, quarter, vec![points])),
+                        }
                     }
-                    // Right and down on screen; the document's y axis runs up from the crop.
-                    let x = f64::from(x0) + f64::from(nx.clamp(0.0, 1.0)) * crop_width;
-                    let y = f64::from(y1) - f64::from(ny.clamp(0.0, 1.0)) * crop_height;
-                    points.push([x, y]);
-                }
-                // One point is a tap, which ink cannot express; two are a stroke.
-                if points.len() < 2 {
-                    continue;
-                }
 
-                let quarter = (f64::from(stroke.width).clamp(0.1, 40.0) * 4.0).round() as i32;
-                match groups.iter_mut().find(|(c, w, _)| *c == stroke.color && *w == quarter) {
-                    Some((_, _, paths)) => paths.push(points),
-                    None => groups.push((stroke.color, quarter, vec![points])),
+                    MarkKind::Rectangle => {
+                        if points.len() < 2 {
+                            continue;
+                        }
+                        let (a, b) = (points[0], points[1]);
+                        let rect = [
+                            a[0].min(b[0]),
+                            a[1].min(b[1]),
+                            a[0].max(b[0]),
+                            a[1].max(b[1]),
+                        ];
+                        // Under a point it is a stray tap, not a shape; PDF would keep it as an
+                        // invisible object forever.
+                        if rect[2] - rect[0] < 1.0 || rect[3] - rect[1] < 1.0 {
+                            continue;
+                        }
+                        shapes.push((
+                            Shape::Rectangle { rect },
+                            style_of(mark.color, mark.width, opacity_of(mark.color)),
+                            String::new(),
+                        ));
+                    }
+
+                    MarkKind::Arrow => {
+                        if points.len() < 2 {
+                            continue;
+                        }
+                        let (from, to) = (points[0], points[1]);
+                        if (to[0] - from[0]).abs() < 1.0 && (to[1] - from[1]).abs() < 1.0 {
+                            continue;
+                        }
+                        shapes.push((
+                            Shape::Line {
+                                from,
+                                to,
+                                start: LineEnding::None,
+                                end: LineEnding::OpenArrow,
+                            },
+                            style_of(mark.color, mark.width, opacity_of(mark.color)),
+                            String::new(),
+                        ));
+                    }
                 }
             }
 
-            for (color, quarter, paths) in groups {
-                let argb = color as u32;
-                let alpha = f64::from((argb >> 24) & 0xFF) / 255.0;
-                let style = Style {
-                    color: [
-                        f64::from((argb >> 16) & 0xFF) / 255.0,
-                        f64::from((argb >> 8) & 0xFF) / 255.0,
-                        f64::from(argb & 0xFF) / 255.0,
-                    ],
-                    // An alpha of zero would write ink nobody can see.
-                    opacity: alpha.clamp(0.05, 1.0),
-                    width: f64::from(quarter) / 4.0,
-                    ..Style::default()
+            for (kind, color, quarter, paths) in freehand {
+                let shape = if kind == MarkKind::Highlighter {
+                    Shape::FreehandHighlight { strokes: paths }
+                } else {
+                    Shape::Ink { strokes: paths }
                 };
+                // A highlighter is paper that lets the text through; ink is ink. The width grows
+                // with it because a highlighter that is as fine as a pen is just a pen.
+                let (opacity, scale) = if kind == MarkKind::Highlighter {
+                    (0.38, 3.0)
+                } else {
+                    (opacity_of(color), 1.0)
+                };
+                let width = (f64::from(quarter) / 4.0) * scale;
+                shapes.push((shape, style_of(color, width as f32, opacity), String::new()));
+            }
+
+            for (shape, style, contents) in shapes {
                 let annotation = NewAnnotation {
                     page,
-                    shape: Shape::Ink { strokes: paths },
+                    shape,
                     style,
-                    contents: String::new(),
+                    contents,
                     author: "PdfCraft".into(),
                 };
                 session
@@ -475,6 +577,79 @@ impl Document {
         let bytes = session.save_bytes(id).map_err(|e| MobileError::Edit { detail: e.to_string() })?;
         std::fs::write(&path, &*bytes).map_err(|e| MobileError::Io { path, detail: e.to_string() })?;
         Ok(bytes.len() as i64)
+    }
+}
+
+/// A mark's points, mapped from the page as displayed to the page as stored.
+///
+/// Screen coordinates run right and down; the document's run right and up from the bottom-left of
+/// the crop box. This is the only place that difference is dealt with.
+fn to_user(points: &[f32], crop: [f32; 4]) -> Vec<[f64; 2]> {
+    let [x0, _, x1, y1] = crop;
+    let width = f64::from(x1 - x0);
+    let height = f64::from(y1 - crop[1]);
+
+    points
+        .chunks_exact(2)
+        .filter_map(|pair| {
+            let (nx, ny) = (pair[0], pair[1]);
+            if !nx.is_finite() || !ny.is_finite() {
+                return None;
+            }
+            Some([
+                f64::from(x0) + f64::from(nx.clamp(0.0, 1.0)) * width,
+                f64::from(y1) - f64::from(ny.clamp(0.0, 1.0)) * height,
+            ])
+        })
+        .collect()
+}
+
+/// A user-space x, as a fraction of the page's width from its left edge.
+fn norm_x(value: f32, crop: [f32; 4]) -> f32 {
+    let width = crop[2] - crop[0];
+    if width.abs() < f32::EPSILON {
+        0.0
+    } else {
+        ((value - crop[0]) / width).clamp(-0.2, 1.2)
+    }
+}
+
+/// A user-space y, as a fraction of the page's height from its *top* edge — the direction a screen
+/// counts in, and the one every consumer of a normalised point here expects.
+fn norm_y(value: f32, crop: [f32; 4]) -> f32 {
+    let height = crop[3] - crop[1];
+    if height.abs() < f32::EPSILON {
+        0.0
+    } else {
+        ((crop[3] - value) / height).clamp(-0.2, 1.2)
+    }
+}
+
+/// `0xAARRGGBB` from the file's three floats, opaque when the file gives no colour.
+fn argb_of(color: Option<[f32; 3]>) -> i32 {
+    let Some([r, g, b]) = color else { return 0xFF00_0000u32 as i32 };
+    let channel = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u32;
+    (0xFF00_0000 | (channel(r) << 16) | (channel(g) << 8) | channel(b)) as i32
+}
+
+/// The alpha an `0xAARRGGBB` asks for, floored so nothing is written invisible.
+fn opacity_of(color: i32) -> f64 {
+    let alpha = f64::from((color as u32 >> 24) & 0xFF) / 255.0;
+    alpha.clamp(0.05, 1.0)
+}
+
+/// A stroke style for a mark: its colour, its opacity, its width.
+fn style_of(color: i32, width: f32, opacity: f64) -> Style {
+    let argb = color as u32;
+    Style {
+        color: [
+            f64::from((argb >> 16) & 0xFF) / 255.0,
+            f64::from((argb >> 8) & 0xFF) / 255.0,
+            f64::from(argb & 0xFF) / 255.0,
+        ],
+        opacity: opacity.clamp(0.05, 1.0),
+        width: f64::from(width.clamp(0.1, 60.0)),
+        ..Style::default()
     }
 }
 
@@ -600,12 +775,13 @@ mod tests {
         assert!(matches!(Document::build(b"not a pdf".to_vec(), None), Err(MobileError::Invalid { .. })));
     }
 
-    /// The whole writing path, end to end: strokes in, a file out, and the file re-opened to see
-    /// that what is there is a real ink annotation rather than pixels baked into the page.
+    /// The whole writing path, end to end: a mark in, a file out, and the file re-opened to see
+    /// that what is there is a real annotation rather than pixels baked into the page.
     #[test]
     fn ink_reaches_the_saved_file_as_an_annotation() {
         let document = Document::build(minimal_pdf(), None).expect("the fixture opens");
-        let stroke = InkStroke {
+        let stroke = Mark {
+            kind: MarkKind::Ink,
             points: vec![0.2, 0.2, 0.6, 0.6, 0.8, 0.3],
             // Opaque dark green, in the 0xAARRGGBB form the UI passes.
             color: 0xFF1B_5E20u32 as i32,
@@ -614,7 +790,7 @@ mod tests {
 
         let path = temp_path("ink");
         document
-            .save_with_ink(path.clone(), vec![PageInk { page: 0, strokes: vec![stroke] }])
+            .save_with_marks(path.clone(), vec![PageMark { page: 0, marks: vec![stroke] }])
             .expect("the document saves");
 
         let reopened = reopen(&path);
@@ -626,13 +802,18 @@ mod tests {
     #[test]
     fn strokes_from_one_pen_share_an_annotation() {
         let document = Document::build(minimal_pdf(), None).expect("the fixture opens");
-        let stroke = |y: f32| InkStroke { points: vec![0.1, y, 0.9, y], color: -0x1000000, width: 2.0 };
+        let stroke = |y: f32| Mark {
+            kind: MarkKind::Ink,
+            points: vec![0.1, y, 0.9, y],
+            color: -0x1000000,
+            width: 2.0,
+        };
 
         let path = temp_path("ink-grouped");
         document
-            .save_with_ink(
+            .save_with_marks(
                 path.clone(),
-                vec![PageInk { page: 0, strokes: vec![stroke(0.2), stroke(0.4), stroke(0.6)] }],
+                vec![PageMark { page: 0, marks: vec![stroke(0.2), stroke(0.4), stroke(0.6)] }],
             )
             .expect("the document saves");
 
@@ -644,34 +825,46 @@ mod tests {
     #[test]
     fn a_different_width_is_its_own_annotation() {
         let document = Document::build(minimal_pdf(), None).expect("the fixture opens");
-        let thin = InkStroke { points: vec![0.1, 0.2, 0.9, 0.2], color: -0x1000000, width: 1.0 };
-        let thick = InkStroke { points: vec![0.1, 0.6, 0.9, 0.6], color: -0x1000000, width: 6.0 };
+        let mark = |y: f32, width: f32| Mark {
+            kind: MarkKind::Ink,
+            points: vec![0.1, y, 0.9, y],
+            color: -0x1000000,
+            width,
+        };
 
         let path = temp_path("ink-widths");
         document
-            .save_with_ink(path.clone(), vec![PageInk { page: 0, strokes: vec![thin, thick] }])
+            .save_with_marks(
+                path.clone(),
+                vec![PageMark { page: 0, marks: vec![mark(0.2, 1.0), mark(0.6, 6.0)] }],
+            )
             .expect("the document saves");
 
         assert_eq!(reopen(&path).annotations.len(), 2);
     }
 
     #[test]
-    fn saving_with_no_ink_writes_no_annotation() {
+    fn saving_with_no_marks_writes_no_annotation() {
         let document = Document::build(minimal_pdf(), None).expect("the fixture opens");
         let path = temp_path("ink-none");
-        document.save_with_ink(path.clone(), Vec::new()).expect("the document saves");
+        document.save_with_marks(path.clone(), Vec::new()).expect("the document saves");
         assert!(reopen(&path).annotations.is_empty(), "an untouched page stays untouched");
     }
 
     #[test]
-    fn ink_outside_the_page_is_refused() {
+    fn a_mark_outside_the_page_is_refused() {
         let document = Document::build(minimal_pdf(), None).expect("the fixture opens");
-        let stroke = InkStroke { points: vec![0.0, 0.0, 1.0, 1.0], color: -0x1000000, width: 2.0 };
+        let stroke = Mark {
+            kind: MarkKind::Ink,
+            points: vec![0.0, 0.0, 1.0, 1.0],
+            color: -0x1000000,
+            width: 2.0,
+        };
         let path = temp_path("ink-range");
 
         for page in [4, -1] {
             let result = document
-                .save_with_ink(path.clone(), vec![PageInk { page, strokes: vec![stroke.clone()] }]);
+                .save_with_marks(path.clone(), vec![PageMark { page, marks: vec![stroke.clone()] }]);
             assert!(matches!(result, Err(MobileError::NoSuchPage { .. })), "page {page} is out of range");
         }
     }
@@ -680,12 +873,88 @@ mod tests {
     fn a_stroke_with_one_point_does_not_error() {
         let document = Document::build(minimal_pdf(), None).expect("the fixture opens");
         // A tap: the UI may hand over a single sample, which ink cannot express.
-        let dot = InkStroke { points: vec![0.5, 0.5], color: -0x1000000, width: 2.0 };
+        let dot = Mark {
+            kind: MarkKind::Ink,
+            points: vec![0.5, 0.5],
+            color: -0x1000000,
+            width: 2.0,
+        };
         let path = temp_path("ink-dot");
         document
-            .save_with_ink(path.clone(), vec![PageInk { page: 0, strokes: vec![dot] }])
+            .save_with_marks(path.clone(), vec![PageMark { page: 0, marks: vec![dot] }])
             .expect("a dot is ignored, not an error");
         assert!(reopen(&path).annotations.is_empty());
+    }
+
+    #[test]
+    fn a_rectangle_becomes_a_square_annotation() {
+        let document = Document::build(minimal_pdf(), None).expect("the fixture opens");
+        let box_shape = Mark {
+            kind: MarkKind::Rectangle,
+            // Two opposite corners, which is how the UI reports a drag.
+            points: vec![0.2, 0.2, 0.7, 0.5],
+            color: -0x1000000,
+            width: 2.0,
+        };
+
+        let path = temp_path("rect");
+        document
+            .save_with_marks(path.clone(), vec![PageMark { page: 0, marks: vec![box_shape] }])
+            .expect("the document saves");
+
+        let reopened = reopen(&path);
+        assert_eq!(reopened.annotations.len(), 1);
+        assert_eq!(reopened.annotations[0].subtype, "Square", "a rectangle is /Square in PDF");
+        // It occupies the area that was dragged over, not the whole page.
+        let width = reopened.annotations[0].rect[2] - reopened.annotations[0].rect[0];
+        assert!(width > 200.0 && width < 400.0, "rect width {width} is half the page, give or take");
+    }
+
+    #[test]
+    fn an_arrow_becomes_a_line_annotation() {
+        let document = Document::build(minimal_pdf(), None).expect("the fixture opens");
+        let arrow = Mark {
+            kind: MarkKind::Arrow,
+            points: vec![0.15, 0.15, 0.85, 0.4],
+            color: -0x1000000,
+            width: 2.0,
+        };
+
+        let path = temp_path("arrow");
+        document
+            .save_with_marks(path.clone(), vec![PageMark { page: 0, marks: vec![arrow] }])
+            .expect("the document saves");
+
+        let reopened = reopen(&path);
+        assert_eq!(reopened.annotations.len(), 1);
+        assert_eq!(reopened.annotations[0].subtype, "Line");
+        assert_eq!(reopened.annotations[0].points.len(), 2, "a line has two ends");
+    }
+
+    #[test]
+    fn a_highlighter_is_its_own_annotation() {
+        let document = Document::build(minimal_pdf(), None).expect("the fixture opens");
+        let pen = Mark {
+            kind: MarkKind::Ink,
+            points: vec![0.1, 0.1, 0.9, 0.1],
+            color: -0x1000000,
+            width: 2.0,
+        };
+        let marker = Mark {
+            kind: MarkKind::Highlighter,
+            points: vec![0.1, 0.5, 0.9, 0.5],
+            color: 0x66FFE066u32 as i32,
+            width: 2.0,
+        };
+
+        let path = temp_path("highlighter");
+        document
+            .save_with_marks(path.clone(), vec![PageMark { page: 0, marks: vec![pen, marker] }])
+            .expect("the document saves");
+
+        // A pen and a highlighter are different tools, so they cannot be merged into one object
+        // even though they share a colour width: two annotations, not one.
+        assert_eq!(reopen(&path).annotations.len(), 2);
     }
 
     /// A path under the temp directory, unique per test so a parallel run cannot collide.

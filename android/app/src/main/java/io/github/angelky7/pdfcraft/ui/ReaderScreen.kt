@@ -93,17 +93,20 @@ import androidx.compose.ui.unit.sp
 import io.github.angelky7.pdfcraft.OpenedDocument
 import io.github.angelky7.pdfcraft.PageCache
 import io.github.angelky7.pdfcraft.R
-import io.github.angelky7.pdfcraft.ink.InkOverlay
-import io.github.angelky7.pdfcraft.ink.InkStore
-import io.github.angelky7.pdfcraft.ink.PenHandler
-import io.github.angelky7.pdfcraft.ink.PenTool
+import io.github.angelky7.pdfcraft.ink.AnnotationOverlay
+import io.github.angelky7.pdfcraft.ink.MarkHandler
+import io.github.angelky7.pdfcraft.ink.MarkOverlay
+import io.github.angelky7.pdfcraft.ink.MarkStore
+import io.github.angelky7.pdfcraft.ink.Tool
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import uniffi.pdfcraft_mobile.AnnotationRow
 import uniffi.pdfcraft_mobile.Document
-import uniffi.pdfcraft_mobile.InkStroke
-import uniffi.pdfcraft_mobile.PageInk
+import uniffi.pdfcraft_mobile.Mark as PdfMark
+import uniffi.pdfcraft_mobile.MarkKind
+import uniffi.pdfcraft_mobile.PageMark
 import uniffi.pdfcraft_mobile.PageSize
 import java.io.File
 
@@ -145,7 +148,13 @@ fun ReaderScreen(
 
     val pages = remember(document) { document.pages() }
     val cache = remember(document) { PageCache(document) }
-    val ink = remember(document) { InkStore() }
+    val store = remember(document) { MarkStore() }
+
+    // The annotations the file arrived with, per page: without drawing them a document
+    // highlighted elsewhere opens looking untouched.
+    val existing = remember(document) {
+        runCatching { document.annotations() }.getOrDefault(emptyList()).groupBy { it.page }
+    }
 
     val start = opened.startPage.coerceIn(0, (pages.size - 1).coerceAtLeast(0))
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = start)
@@ -154,7 +163,7 @@ fun ReaderScreen(
     var mode by remember { mutableStateOf(ReadMode.Vertical) }
     var zoom by remember { mutableFloatStateOf(1f) }
     var writing by remember { mutableStateOf(false) }
-    var tool by remember { mutableStateOf(PenTool.Ink) }
+    var tool by remember { mutableStateOf(Tool.Pen) }
     var penColor by remember { mutableStateOf(PenColors.first().first) }
     var penWidth by remember { mutableFloatStateOf(PenWidths[1].first) }
     var allowFinger by remember { mutableStateOf(false) }
@@ -203,7 +212,7 @@ fun ReaderScreen(
         saving = true
         scope.launch {
             val outcome = withContext(Dispatchers.IO) {
-                runCatching { writeInkedCopy(document, ink, context, target) }
+                runCatching { writeMarksCopy(document, store, context, target) }
             }
             saving = false
             outcome
@@ -322,7 +331,8 @@ fun ReaderScreen(
                     pages = pages,
                     listState = listState,
                     zoom = zoom,
-                    ink = ink,
+                    store = store,
+                    existing = existing,
                     writing = writing,
                     tool = tool,
                     penColor = penColor,
@@ -338,7 +348,8 @@ fun ReaderScreen(
                     pages = pages,
                     pagerState = pagerState,
                     zoom = zoom,
-                    ink = ink,
+                    store = store,
+                    existing = existing,
                     writing = writing,
                     tool = tool,
                     penColor = penColor,
@@ -358,17 +369,17 @@ fun ReaderScreen(
             ) {
                 if (writing) {
                     InkToolbar(
+                        tool = tool,
+                        onTool = { tool = it },
                         color = penColor,
                         onColor = { penColor = it },
                         width = penWidth,
                         onWidth = { penWidth = it },
-                        tool = tool,
-                        onTool = { tool = it },
                         allowFinger = allowFinger,
                         onAllowFinger = { allowFinger = it },
-                        canUndo = !ink.isEmpty(),
+                        canUndo = !store.isEmpty(),
                         saving = saving,
-                        onUndo = { ink.undo() },
+                        onUndo = { store.undo() },
                         onSave = { savePicker.launch(opened.displayName) },
                     )
                 } else {
@@ -449,9 +460,10 @@ private fun VerticalReader(
     pages: List<PageSize>,
     listState: androidx.compose.foundation.lazy.LazyListState,
     zoom: Float,
-    ink: InkStore,
+    store: MarkStore,
+    existing: Map<Int, List<AnnotationRow>>,
     writing: Boolean,
-    tool: PenTool,
+    tool: Tool,
     penColor: Color,
     penWidth: Float,
     allowFinger: Boolean,
@@ -489,7 +501,8 @@ private fun VerticalReader(
                         index = index,
                         page = pages[index],
                         width = pageWidth,
-                        ink = ink,
+                        store = store,
+                        existing = existing[index].orEmpty(),
                         writing = writing,
                         tool = tool,
                         color = penColor,
@@ -511,9 +524,10 @@ private fun SingleReader(
     pages: List<PageSize>,
     pagerState: androidx.compose.foundation.pager.PagerState,
     zoom: Float,
-    ink: InkStore,
+    store: MarkStore,
+    existing: Map<Int, List<AnnotationRow>>,
     writing: Boolean,
-    tool: PenTool,
+    tool: Tool,
     penColor: Color,
     penWidth: Float,
     allowFinger: Boolean,
@@ -552,7 +566,8 @@ private fun SingleReader(
                         index = index,
                         page = pages[index],
                         width = pageWidth,
-                        ink = ink,
+                        store = store,
+                        existing = existing[index].orEmpty(),
                         writing = writing,
                         tool = tool,
                         color = penColor,
@@ -613,10 +628,11 @@ private fun Modifier.pinchZoom(enabled: Boolean, onZoomBy: (Float) -> Unit): Mod
 }
 
 /**
- * One page: its raster once rendered, its ink on top, and a spinner until the raster arrives.
+ * One page: its raster once rendered, the file's own annotations over it, then the marks being
+ * drawn, and a spinner until the raster arrives.
  *
  * [width] is the page's width on screen, and it is the only thing a zoom changes — which is what
- * keeps the pen honest. The touch handler divides by exactly this width, so a stroke is stored in
+ * keeps the pen honest. The touch handler divides by exactly this width, so a mark is stored in
  * page coordinates whether the page is at fit-width or at three times that.
  */
 @OptIn(ExperimentalComposeUiApi::class)
@@ -627,9 +643,10 @@ private fun PageView(
     index: Int,
     page: PageSize,
     width: Dp,
-    ink: InkStore,
+    store: MarkStore,
+    existing: List<AnnotationRow>,
     writing: Boolean,
-    tool: PenTool,
+    tool: Tool,
     color: Color,
     widthPt: Float,
     allowFinger: Boolean,
@@ -649,15 +666,17 @@ private fun PageView(
         }
     }
 
-    val strokes = ink.strokes(index)
+    val marks = store.marks(index)
+    val preview = store.preview(index)
     val handler = remember(index, tool, color, widthPt, allowFinger) {
-        PenHandler(
+        MarkHandler(
+            tool = tool,
             color = color,
             widthPt = widthPt,
             allowFinger = allowFinger,
-            tool = tool,
-            onStroke = { stroke -> ink.add(index, stroke) },
-            onErase = { x, y -> ink.eraseNear(index, x, y, radius = 0.012f) },
+            onCommit = { mark -> store.add(index, mark) },
+            onPreview = { mark -> store.setPreview(index, mark) },
+            onErase = { x, y -> store.eraseNear(index, x, y, radius = 0.012f) },
         )
     }
 
@@ -700,7 +719,19 @@ private fun PageView(
                 )
             }
 
-            InkOverlay(strokes = strokes, pageWidthPt = page.width, modifier = Modifier.fillMaxSize())
+            // Under the marks, over the page: a highlight somebody else made is part of the
+            // document, and what this reader draws on top of it is not.
+            AnnotationOverlay(
+                rows = existing,
+                pageWidthPt = page.width,
+                modifier = Modifier.fillMaxSize(),
+            )
+
+            MarkOverlay(
+                marks = if (preview != null) marks + preview else marks,
+                pageWidthPt = page.width,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 }
@@ -847,29 +878,72 @@ private fun GoToPageDialog(total: Int, onGo: (Int) -> Unit, onDismiss: () -> Uni
 }
 
 /**
- * Write the document plus its strokes to the picked location.
+ * Write the document plus its marks to the picked location.
  *
  * The engine writes a real file first, and that file is then copied into the picked URI: a content
  * URI is a stream, not something the engine can open, so going through a file is what lets the
  * engine own the PDF writing — annotations, appearance streams and all.
  */
-private fun writeInkedCopy(document: Document, ink: InkStore, context: Context, target: Uri) {
+private fun writeMarksCopy(document: Document, store: MarkStore, context: Context, target: Uri) {
     val exported = File(context.cacheDir, "export.pdf")
-    val pageInks = ink.snapshot().map { (page, strokes) ->
-        PageInk(
+    val pageMarks = store.snapshot().map { (page, marks) ->
+        PageMark(
             page = page,
-            strokes = strokes.map { stroke ->
-                InkStroke(
-                    points = stroke.points.flatMap { listOf(it.x, it.y) },
-                    color = stroke.color.toArgb(),
-                    width = stroke.widthPt,
+            marks = marks.map { mark ->
+                PdfMark(
+                    kind = when (mark.kind) {
+                        Tool.Pen -> MarkKind.Ink
+                        Tool.Highlighter -> MarkKind.Highlighter
+                        Tool.Rectangle -> MarkKind.Rectangle
+                        Tool.Arrow -> MarkKind.Arrow
+                        // The eraser removes; it never becomes a mark of its own.
+                        Tool.Eraser -> MarkKind.Ink
+                    },
+                    points = mark.points.flatMap { listOf(it.x, it.y) },
+                    color = mark.color.toArgb(),
+                    width = mark.widthPt,
                 )
             },
         )
     }
-    document.saveWithInk(exported.absolutePath, pageInks)
+    document.saveWithMarks(exported.absolutePath, pageMarks)
 
     context.contentResolver.openOutputStream(target)?.use { out ->
         exported.inputStream().use { input -> input.copyTo(out, bufferSize = 1 shl 16) }
     } ?: error(context.getString(R.string.error_cannot_write))
 }
+
+/** Ask for a page number, for when the reader knows where they want to be. */
+@Composable
+private fun GoToPageDialog(total: Int, onGo: (Int) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.action_go_to_page)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { input -> text = input.filter { it.isDigit() }.take(6) },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.page_number_hint, total)) },
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { text.toIntOrNull()?.let { onGo(it - 1) } ?: onDismiss() },
+                enabled = text.toIntOrNull()?.let { it in 1..total } == true,
+            ) {
+                Text(stringResource(R.string.action_go))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
+}
+
