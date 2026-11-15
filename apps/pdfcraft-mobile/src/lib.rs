@@ -21,8 +21,8 @@ uniffi::setup_scaffolding!();
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum MobileError {
     /// The file could not be read at all.
-    #[error("{path} could not be read: {message}")]
-    Io { path: String, message: String },
+    #[error("{path} could not be read: {detail}")]
+    Io { path: String, detail: String },
 
     /// The document is encrypted and no password was given.
     #[error("the document needs a password")]
@@ -33,12 +33,12 @@ pub enum MobileError {
     WrongPassword,
 
     /// The bytes are not a PDF this engine can read.
-    #[error("this file is not a readable PDF: {message}")]
-    Invalid { message: String },
+    #[error("this file is not a readable PDF: {detail}")]
+    Invalid { detail: String },
 
     /// The renderer gave up on this page.
-    #[error("page {page} could not be drawn: {message}")]
-    Render { page: i32, message: String },
+    #[error("page {page} could not be drawn: {detail}")]
+    Render { page: i32, detail: String },
 
     /// A page number past the last page.
     #[error("there is no page {page}: the document has {count}")]
@@ -136,7 +136,7 @@ impl Document {
     /// Open a password-protected document; an empty password means "none given".
     #[uniffi::constructor]
     pub fn open_with_password(path: String, password: String) -> Result<Arc<Self>, MobileError> {
-        let bytes = std::fs::read(&path).map_err(|e| MobileError::Io { path, message: e.to_string() })?;
+        let bytes = std::fs::read(&path).map_err(|e| MobileError::Io { path, detail: e.to_string() })?;
         let password = (!password.is_empty()).then_some(password);
         Self::build(bytes, password)
     }
@@ -193,7 +193,7 @@ impl Document {
         let rendered = self.renderer().render(request);
 
         if let Some(message) = rendered.error {
-            return Err(MobileError::Render { page: index, message });
+            return Err(MobileError::Render { page: index, detail });
         }
 
         // RGBA from the engine, BGRA in memory for the Bitmap: swap the outer bytes of every
@@ -234,8 +234,8 @@ fn open_error(error: OpenError) -> MobileError {
     match error {
         OpenError::NeedsPassword => MobileError::NeedsPassword,
         OpenError::WrongPassword => MobileError::WrongPassword,
-        OpenError::Invalid(message) => MobileError::Invalid { message },
-        OpenError::Unsupported(message) => MobileError::Invalid { message },
+        OpenError::Invalid(detail) => MobileError::Invalid { detail },
+        OpenError::Unsupported(detail) => MobileError::Invalid { detail },
     }
 }
 
