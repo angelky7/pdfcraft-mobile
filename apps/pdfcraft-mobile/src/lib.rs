@@ -192,7 +192,7 @@ impl Document {
         let request = RenderRequest { page: index as usize, scale, ..RenderRequest::default() };
         let rendered = self.renderer().render(request);
 
-        if let Some(message) = rendered.error {
+        if let Some(detail) = rendered.error {
             return Err(MobileError::Render { page: index, detail });
         }
 
