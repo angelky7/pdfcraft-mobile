@@ -73,13 +73,21 @@ jobs:
           [ -d "$sdk/ndk/27.2.12479018" ]      || needs+=("ndk;27.2.12479018")
           if [ ${#needs[@]} -gt 0 ]; then
             test -n "$sdkmanager" || { echo "::error::sdkmanager not found under $sdk"; exit 1; }
-            yes | "$sdkmanager" --licenses >/dev/null 2>&1 || true
-            yes | "$sdkmanager" --install "${needs[@]}" >/dev/null
+            echo "Installing: ${needs[*]}"
+            # The image usually has the licences accepted already. If it does not, accept them
+            # and retry — with pipefail off for the `yes`, whose SIGPIPE on the far side of the
+            # pipe would otherwise abort the step.
+            if ! "$sdkmanager" --install "${needs[@]}" >/dev/null 2>&1; then
+              set +o pipefail
+              yes | "$sdkmanager" --licenses >/dev/null 2>&1 || true
+              set -o pipefail
+              "$sdkmanager" --install "${needs[@]}" >/dev/null
+            fi
           fi
 
           echo "ANDROID_NDK_HOME=$sdk/ndk/27.2.12479018" >>"$GITHUB_ENV"
-          echo "Build tools: $(ls -1 "$sdk/build-tools" | sort -V | tail -1)"
-          echo "NDKs: $(ls -1 "$sdk/ndk" 2>/dev/null | tr '\n' ' ')"
+          echo "Build tools: $(ls -1 "$sdk/build-tools" 2>/dev/null | sort -V | tail -1 || true)"
+          echo "NDKs: $(ls -1 "$sdk/ndk" 2>/dev/null | tr '\n' ' ' || true)"
 
       - uses: taiki-e/install-action@v2
         with:
