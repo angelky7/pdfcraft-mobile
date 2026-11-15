@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.AlertDialog
@@ -129,6 +130,7 @@ fun ReaderScreen(opened: OpenedDocument, onClose: () -> Unit) {
     var zoom by remember { mutableFloatStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     var toolbarOpen by remember { mutableStateOf(false) }
+    var panelTab by remember { mutableStateOf<NavTab?>(null) }
     var penColor by remember { mutableStateOf(PenColors.first().first) }
     var penWidth by remember { mutableFloatStateOf(PenWidths[1].first) }
     var saving by remember { mutableStateOf(false) }
@@ -194,6 +196,13 @@ fun ReaderScreen(opened: OpenedDocument, onClose: () -> Unit) {
                     }
                 },
                 actions = {
+                    IconButton(onClick = { panelTab = NavTab.Thumbnails }) {
+                        Icon(
+                            Icons.Filled.Menu,
+                            contentDescription = stringResource(R.string.panel_toggle),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     IconButton(onClick = { toolbarOpen = !toolbarOpen }) {
                         Icon(
                             Icons.Filled.Edit,
@@ -217,11 +226,12 @@ fun ReaderScreen(opened: OpenedDocument, onClose: () -> Unit) {
             )
         },
     ) { insets ->
-        BoxWithConstraints(
-            Modifier
-                .fillMaxSize()
-                .padding(insets),
-        ) {
+        Box(Modifier.fillMaxSize()) {
+            BoxWithConstraints(
+                Modifier
+                    .fillMaxSize()
+                    .padding(insets),
+            ) {
             val expanded = maxWidth >= ExpandedWidth
 
             Row(Modifier.fillMaxSize()) {
@@ -291,6 +301,22 @@ fun ReaderScreen(opened: OpenedDocument, onClose: () -> Unit) {
                             .padding(horizontal = 12.dp, vertical = 16.dp),
                     )
                 }
+            }
+            }
+
+            panelTab?.let { tab ->
+                NavPanel(
+                    document = document,
+                    pages = pages,
+                    cache = cache,
+                    currentPage = currentPage,
+                    initialTab = tab,
+                    onJump = { page ->
+                        panelTab = null
+                        scope.launch { listState.scrollToItem(page.coerceIn(0, (pages.size - 1).coerceAtLeast(0))) }
+                    },
+                    onDismiss = { panelTab = null },
+                )
             }
         }
     }

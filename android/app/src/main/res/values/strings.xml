@@ -30,4 +30,15 @@
     <string name="save_title">保存</string>
     <string name="saved_notice">已保存到你选择的位置。</string>
     <string name="error_cannot_write">无法写入所选位置</string>
+    <string name="panel_toggle">目录与导航</string>
+    <string name="tab_thumbnails">缩略图</string>
+    <string name="tab_outline">目录</string>
+    <string name="tab_comments">注释</string>
+    <string name="tab_search">搜索</string>
+    <string name="outline_empty">这个文档没有目录</string>
+    <string name="comments_empty">这个文档还没有注释</string>
+    <string name="search_hint">搜索文档内容</string>
+    <string name="search_no_results">没有找到</string>
+    <string name="search_count">共 %1$d 处</string>
+    <string name="page_number">第 %1$d 页</string>
 </resources>

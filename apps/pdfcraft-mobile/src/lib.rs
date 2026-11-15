@@ -23,7 +23,7 @@ use std::sync::{Arc, Mutex};
 
 use pdfcraft_annot::{NewAnnotation, Shape, Style};
 use pdfcraft_engine::{Edit, Session};
-use pdfcraft_render::{OpenError, PageRenderer, RenderConfig, RenderRequest, inspect};
+use pdfcraft_render::{OpenError, PageRenderer, RenderConfig, RenderRequest, RequestKind, inspect};
 
 uniffi::setup_scaffolding!();
 
@@ -77,6 +77,36 @@ pub struct InkStroke {
     pub width: f32,
 }
 
+/// One line of the document's outline (its bookmarks, in reading order).
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct OutlineRow {
+    pub title: String,
+    /// 0-based page the bookmark goes to, or -1 when it goes nowhere in this document.
+    pub page: i32,
+    /// Nesting depth: 0 at the top level.
+    pub depth: i32,
+}
+
+/// One annotation already in the document.
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct AnnotationRow {
+    pub page: i32,
+    /// PDF subtype, such as `Ink`, `Highlight` or `Text`.
+    pub subtype: String,
+    /// The comment's text, empty when it has none.
+    pub contents: String,
+}
+
+/// A page that contains the search term, with the text around the first match on it.
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct SearchHit {
+    pub page: i32,
+    /// The sentence-ish context around the first match, for the result list.
+    pub snippet: String,
+    /// How many times the term appears on this page.
+    pub count: i32,
+}
+
 /// Everything written on one page.
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct PageInk {
@@ -128,6 +158,11 @@ pub struct Document {
     /// Each page's effective crop box in points, the rectangle that normalised stroke points map
     /// onto. Kept beside `pages` because the reader never needs it.
     crops: Vec<[f32; 4]>,
+    /// The outline, flattened once at open: a tree is what the file holds, a list is what a
+    /// navigation panel draws.
+    outline: Vec<OutlineRow>,
+    /// Annotations the document arrived with, for the comments panel.
+    annotations: Vec<AnnotationRow>,
     title: Option<String>,
     /// Whether a password opened it, so the UI can say so.
     encrypted: bool,
@@ -148,6 +183,18 @@ impl Document {
             .collect();
         let crops = info.pages.iter().map(|p| p.crop).collect();
 
+        let mut outline = Vec::new();
+        flatten_outline(&info.outline, 0, &mut outline);
+        let annotations = info
+            .annotations
+            .iter()
+            .map(|a| AnnotationRow {
+                page: a.page as i32,
+                subtype: a.subtype.clone(),
+                contents: a.contents.clone().unwrap_or_default(),
+            })
+            .collect();
+
         let config = RenderConfig {
             password: password.as_deref().map(Arc::from),
             // Installed CJK faces may draw fonts the PDF fails to embed. Screen only: nothing
@@ -165,6 +212,8 @@ impl Document {
             renderer: Mutex::new(PageRenderer::new(bytes, config)),
             pages,
             crops,
+            outline,
+            annotations,
             title: info.title.clone(),
             encrypted: info.encrypted,
         }))
@@ -226,6 +275,58 @@ impl Document {
     /// Whether a password was needed to open the document.
     pub fn is_encrypted(&self) -> bool {
         self.encrypted
+    }
+
+    /// The document's bookmarks in reading order, flattened, each with its nesting depth.
+    pub fn outline(&self) -> Vec<OutlineRow> {
+        self.outline.clone()
+    }
+
+    /// The annotations the document arrived with.
+    pub fn annotations(&self) -> Vec<AnnotationRow> {
+        self.annotations.clone()
+    }
+
+    /// Find a term in the document's text layer.
+    ///
+    /// Each page is asked for its text glyphs and the string is searched as-is, so a term split
+    /// across a line break or a ligature can be missed — the engine's text layer is what it is.
+    /// Returns one hit per page, with the context around the first match, and stops after
+    /// `max_pages` hits so a common word in a long manual cannot freeze the UI.
+    ///
+    /// Call from a background dispatcher: this interprets every page it searches.
+    pub fn search(&self, query: String, max_pages: i32) -> Vec<SearchHit> {
+        let needle = query.trim().to_lowercase();
+        if needle.is_empty() {
+            return Vec::new();
+        }
+        let limit = max_pages.max(1) as usize;
+
+        let mut hits = Vec::new();
+        let mut renderer = self.renderer();
+        for page in 0..self.pages.len() {
+            let request = RenderRequest { page, kind: RequestKind::Text, ..RenderRequest::default() };
+            let rendered = renderer.render(request);
+            let Some(text) = rendered.text else { continue };
+
+            let haystack = page_text(&text);
+            let haystack_lower = haystack.to_lowercase();
+            let count = haystack_lower.matches(&needle).count();
+            if count == 0 {
+                continue;
+            }
+            if let Some(at) = haystack_lower.find(&needle) {
+                hits.push(SearchHit {
+                    page: page as i32,
+                    snippet: context(&haystack, at, needle.len()),
+                    count: count as i32,
+                });
+            }
+            if hits.len() >= limit {
+                break;
+            }
+        }
+        hits
     }
 
     /// Rasterize a page.
@@ -374,6 +475,55 @@ impl Document {
         let bytes = session.save_bytes(id).map_err(|e| MobileError::Edit { detail: e.to_string() })?;
         std::fs::write(&path, &*bytes).map_err(|e| MobileError::Io { path, detail: e.to_string() })?;
         Ok(bytes.len() as i64)
+    }
+}
+
+/// The page's text as one string, with the engine's word breaks turned back into spaces.
+///
+/// Glyph order is the text layer's own order, which is reading order per line; without the spaces
+/// a search for "the document" would only match when the words happen to be adjacent glyphs.
+fn page_text(text: &pdfcraft_render::PageText) -> String {
+    let mut out = String::with_capacity(text.glyphs.len() + 16);
+    for (index, glyph) in text.glyphs.iter().enumerate() {
+        if text.space_before.get(index).copied().unwrap_or(false) {
+            out.push(' ');
+        }
+        out.push_str(&glyph.text);
+    }
+    out
+}
+
+/// The text around a match, for a result row: a little before, a little after.
+///
+/// The match position comes from a lower-cased copy of the page, which can be a different length
+/// than the page itself (a German ß lower-cases to two characters, for one), so both ends are
+/// pulled back to a character boundary before slicing: a slightly-off snippet beats a panic.
+fn context(text: &str, at: usize, len: usize) -> String {
+    let at = char_boundary(text, at);
+    let end = char_boundary(text, at.saturating_add(len));
+    let start = char_boundary(text, at.saturating_sub(40));
+    let stop = char_boundary(text, (end + 60).min(text.len()));
+    text[start..stop].trim().to_string()
+}
+
+/// `index`, moved back to the nearest character boundary of `text`.
+fn char_boundary(text: &str, index: usize) -> usize {
+    let mut index = index.min(text.len());
+    while index > 0 && !text.is_char_boundary(index) {
+        index -= 1;
+    }
+    index
+}
+
+/// Flatten the outline tree into the rows a panel draws.
+fn flatten_outline(items: &[pdfcraft_render::OutlineItem], depth: i32, out: &mut Vec<OutlineRow>) {
+    for item in items {
+        out.push(OutlineRow {
+            title: item.title.clone(),
+            page: item.page.map_or(-1, |page| page as i32),
+            depth,
+        });
+        flatten_outline(&item.children, depth + 1, out);
     }
 }
 

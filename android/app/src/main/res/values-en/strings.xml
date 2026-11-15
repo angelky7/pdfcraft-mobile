@@ -30,4 +30,15 @@
     <string name="save_title">Save</string>
     <string name="saved_notice">Saved where you chose.</string>
     <string name="error_cannot_write">That location could not be written</string>
+    <string name="panel_toggle">Contents and navigation</string>
+    <string name="tab_thumbnails">Pages</string>
+    <string name="tab_outline">Contents</string>
+    <string name="tab_comments">Comments</string>
+    <string name="tab_search">Search</string>
+    <string name="outline_empty">This document has no outline</string>
+    <string name="comments_empty">No comments in this document yet</string>
+    <string name="search_hint">Search the document</string>
+    <string name="search_no_results">Nothing found</string>
+    <string name="search_count">%1$d matches</string>
+    <string name="page_number">Page %1$d</string>
 </resources>
