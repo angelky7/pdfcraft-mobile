@@ -892,12 +892,12 @@ private fun writeMarksCopy(document: Document, store: MarkStore, context: Contex
             marks = marks.map { mark ->
                 PdfMark(
                     kind = when (mark.kind) {
-                        Tool.Pen -> MarkKind.Ink
-                        Tool.Highlighter -> MarkKind.Highlighter
-                        Tool.Rectangle -> MarkKind.Rectangle
-                        Tool.Arrow -> MarkKind.Arrow
+                        Tool.Pen -> MarkKind.INK
+                        Tool.Highlighter -> MarkKind.HIGHLIGHTER
+                        Tool.Rectangle -> MarkKind.RECTANGLE
+                        Tool.Arrow -> MarkKind.ARROW
                         // The eraser removes; it never becomes a mark of its own.
-                        Tool.Eraser -> MarkKind.Ink
+                        Tool.Eraser -> MarkKind.INK
                     },
                     points = mark.points.flatMap { listOf(it.x, it.y) },
                     color = mark.color.toArgb(),
@@ -912,38 +912,3 @@ private fun writeMarksCopy(document: Document, store: MarkStore, context: Contex
         exported.inputStream().use { input -> input.copyTo(out, bufferSize = 1 shl 16) }
     } ?: error(context.getString(R.string.error_cannot_write))
 }
-
-/** Ask for a page number, for when the reader knows where they want to be. */
-@Composable
-private fun GoToPageDialog(total: Int, onGo: (Int) -> Unit, onDismiss: () -> Unit) {
-    var text by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.action_go_to_page)) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { input -> text = input.filter { it.isDigit() }.take(6) },
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.page_number_hint, total)) },
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { text.toIntOrNull()?.let { onGo(it - 1) } ?: onDismiss() },
-                enabled = text.toIntOrNull()?.let { it in 1..total } == true,
-            ) {
-                Text(stringResource(R.string.action_go))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.action_cancel))
-            }
-        },
-    )
-}
-
