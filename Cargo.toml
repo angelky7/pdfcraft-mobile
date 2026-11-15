@@ -139,9 +139,10 @@ incremental = false
 [profile.release]
 lto = "thin"
 codegen-units = 1
-# This library ships inside an APK: its symbols are dead weight on a phone and cost roughly a
-# third of the file. Backtraces from a release build lose their names, which is the trade.
-strip = "symbols"
+# Debug info is dead weight inside an APK and is most of what stripping takes back. NOT
+# "symbols": UniFFI keeps the metadata the Kotlin bindings are generated from in named statics,
+# and stripping symbols deletes them — the build then fails with "No UniFFI metadata found".
+strip = "debuginfo"
 
 # Vendored, patched third-party crates (see vendor/README.md). Each patch is meant to go upstream.
 [patch.crates-io]
