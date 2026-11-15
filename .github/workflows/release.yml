@@ -1,0 +1,138 @@
+# Builds the APK: on a tag it becomes a release, on a manual run it is the run's artifact.
+#
+# The Rust engine is cross-compiled by cargo-ndk into the app's jniLibs, and the Kotlin bindings
+# are generated from that library during the same build — so a release cannot ship bindings that
+# disagree with the engine they call.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  # One ABI by default (arm64-v8a); the 32-bit build is asked for explicitly.
+  PDFCRAFT_ABIS: arm64-v8a
+
+jobs:
+  apk:
+    name: APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: v
+        name: Resolve the version
+        run: |
+          set -euo pipefail
+          listed="$(sed -n 's/^pdfcraft\.version=//p' android/gradle.properties)"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then v="${GITHUB_REF_NAME#v}"; else v="$listed"; fi
+          if [ "$v" != "$listed" ]; then
+            echo "::error::the tag is v$v but gradle.properties says pdfcraft.version=$listed"
+            exit 1
+          fi
+          echo "version=$v" >>"$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # rust-toolchain.toml names the channel and the two Android targets, so this installs both.
+      - name: Install Rust
+        run: rustup toolchain install
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          # The target directory is the Android one, not the host's.
+          workspaces: ". -> target"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install the NDK
+        run: |
+          set -euo pipefail
+          version="27.2.12479018"
+          if [ ! -d "$ANDROID_HOME/ndk/$version" ]; then
+            yes | sdkmanager --install "ndk;$version" >/dev/null
+          fi
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$version" >>"$GITHUB_ENV"
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          # No wrapper in the repository; the action provides the distribution, pinned here so a
+          # new Gradle release cannot change how the build behaves between runs.
+          gradle-version: '8.11.1'
+
+      # The keystore is optional: without one the build falls back to Android's debug key, which
+      # installs fine but cannot upgrade a release-signed install.
+      - name: Release key
+        env:
+          KEYSTORE_B64: ${{ secrets.PDFCRAFT_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.PDFCRAFT_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.PDFCRAFT_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.PDFCRAFT_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_B64:-}" ]; then
+            echo "::warning::no signing key configured; the APK will carry the debug signature"
+            exit 0
+          fi
+          keystore="$RUNNER_TEMP/release.p12"
+          printf '%s' "$KEYSTORE_B64" | base64 -d >"$keystore"
+          {
+            echo "PDFCRAFT_KEYSTORE=$keystore"
+            echo "PDFCRAFT_KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD:-}"
+            echo "PDFCRAFT_KEY_PASSWORD=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+            echo "PDFCRAFT_KEY_ALIAS=${KEY_ALIAS:-pdfcraft}"
+          } >>"$GITHUB_ENV"
+
+      - name: Build
+        working-directory: android
+        run: |
+          gradle --no-daemon --stacktrace assembleRelease \
+            -Ppdfcraft.abis="${PDFCRAFT_ABIS}"
+
+      - name: Verify the APK
+        run: |
+          set -euo pipefail
+          apk="android/app/build/outputs/apk/release/app-release.apk"
+          test -f "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk"
+          mkdir -p dist
+          cp "$apk" "dist/pdfcraft-${PDFCRAFT_ABIS}-${{ steps.v.outputs.version }}.apk"
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: dist/*.apk
+          if-no-files-found: error
+
+      - name: Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.apk \
+            --title "PdfCraft ${{ steps.v.outputs.version }}" \
+            --notes "Built from ${GITHUB_SHA:0:9} for ${PDFCRAFT_ABIS}." \
+            --prerelease
+
+      - name: Remove the release key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.p12"

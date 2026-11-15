@@ -1,0 +1,12 @@
+[toolchain]
+# `stable` rather than a pinned number: the workspace requires 1.95 or newer
+# (rust-version in Cargo.toml), and a channel keeps a CI run from failing because
+# a specific point release was yanked or never existed on a runner image.
+channel = "stable"
+profile = "minimal"
+targets = [
+    # arm64-v8a: every phone and tablet made since roughly 2016.
+    "aarch64-linux-android",
+    # armeabi-v7a: older 32-bit devices, when the build asks for them.
+    "armv7-linux-androideabi",
+]

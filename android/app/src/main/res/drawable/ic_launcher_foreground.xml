@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A sheet with a folded corner and three lines of text, inside the 72 dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,28 L60,28 L72,40 L72,76 A4,4 0 0 1 68,80 L38,80 A4,4 0 0 1 34,76 L34,32 A4,4 0 0 1 38,28 Z" />
+    <path
+        android:fillColor="#8FD3B8"
+        android:pathData="M60,28 L72,40 L64,40 A4,4 0 0 1 60,36 Z" />
+    <path
+        android:fillColor="#2C6A55"
+        android:pathData="M43,48 h20 v3 h-20 z" />
+    <path
+        android:fillColor="#2C6A55"
+        android:pathData="M43,56 h20 v3 h-20 z" />
+    <path
+        android:fillColor="#2C6A55"
+        android:pathData="M43,64 h13 v3 h-13 z" />
+</vector>

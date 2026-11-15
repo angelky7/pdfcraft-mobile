@@ -1,0 +1,26 @@
+# Rust
+/target
+
+# Gradle / Android
+/android/.gradle
+/android/build
+/android/app/build
+/android/local.properties
+/android/.kotlin
+*.hprof
+
+# Generated bindings and libraries land under android/app/build
+
+# IDE
+/.idea
+*.iml
+/.vscode
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build output that is not source
+/dist
+*.apk
+*.aab

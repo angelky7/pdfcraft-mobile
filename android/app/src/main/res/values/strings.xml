@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Chinese is the default: an untranslated string falls back to this file. -->
+<resources>
+    <string name="app_name">PdfCraft</string>
+
+    <string name="action_open">打开 PDF</string>
+    <string name="action_close">关闭文档</string>
+    <string name="action_dismiss">知道了</string>
+
+    <string name="home_lead">在本机阅读 PDF。文件不会离开这台设备，不需要账号，也不会上传任何内容。</string>
+    <string name="home_opening">正在打开…</string>
+    <string name="home_hint">手机与平板通用。从文件管理器、聊天附件或下载目录里选择 PDF 即可。</string>
+
+    <string name="page_of">第 %1$d / %2$d 页</string>
+
+    <string name="error_open_title">打不开这个文件</string>
+    <string name="error_cannot_read">无法读取选中的文件</string>
+    <string name="untitled_document">未命名文档</string>
+</resources>

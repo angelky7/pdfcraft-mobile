@@ -1,0 +1,16 @@
+[package]
+name = "pdfcraft-mobile-bindgen"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Generates the Kotlin bindings for pdfcraft-mobile from the built library (UniFFI, library mode)"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/main.rs"
+
+[dependencies]
+# The `cli` feature is what brings `uniffi_bindgen_main`, and only this bin crate needs it: the
+# library itself must not link a bindings generator into the app.
+uniffi = { version = "0.32.2", features = ["cli"] }
