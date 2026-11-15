@@ -16,4 +16,18 @@
     <string name="error_open_title">打不开这个文件</string>
     <string name="error_cannot_read">无法读取选中的文件</string>
     <string name="untitled_document">未命名文档</string>
+    <string name="pen_toggle">手写批注</string>
+    <string name="pen_zoom_hint">放大状态下不能书写，请先回到 100%</string>
+    <string name="pen_black">黑色</string>
+    <string name="pen_red">红色</string>
+    <string name="pen_blue">蓝色</string>
+    <string name="pen_amber">琥珀</string>
+    <string name="pen_thin">细</string>
+    <string name="pen_medium">中</string>
+    <string name="pen_thick">粗</string>
+    <string name="action_undo">撤销一笔</string>
+    <string name="action_save">保存副本</string>
+    <string name="save_title">保存</string>
+    <string name="saved_notice">已保存到你选择的位置。</string>
+    <string name="error_cannot_write">无法写入所选位置</string>
 </resources>

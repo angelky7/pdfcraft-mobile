@@ -122,6 +122,12 @@ jobs:
             echo "PDFCRAFT_KEY_ALIAS=${KEY_ALIAS:-pdfcraft}"
           } >>"$GITHUB_ENV"
 
+      # The binding crate's own tests: they open a PDF, write ink, save, and re-open the result to
+      # check a real annotation came out. That is the one part of this project that cannot be
+      # checked by looking at the APK, so it is checked here.
+      - name: Test the binding
+        run: cargo test -p pdfcraft-mobile --lib -- --nocapture
+
       - name: Build
         working-directory: android
         run: |

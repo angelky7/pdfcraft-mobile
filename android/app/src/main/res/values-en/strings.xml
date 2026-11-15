@@ -16,4 +16,18 @@
     <string name="error_open_title">This file could not be opened</string>
     <string name="error_cannot_read">The selected file could not be read</string>
     <string name="untitled_document">Untitled document</string>
+    <string name="pen_toggle">Write on the page</string>
+    <string name="pen_zoom_hint">Zoomed in, the page cannot be written on. Go back to 100% first.</string>
+    <string name="pen_black">Black</string>
+    <string name="pen_red">Red</string>
+    <string name="pen_blue">Blue</string>
+    <string name="pen_amber">Amber</string>
+    <string name="pen_thin">Thin</string>
+    <string name="pen_medium">Medium</string>
+    <string name="pen_thick">Thick</string>
+    <string name="action_undo">Undo the last stroke</string>
+    <string name="action_save">Save a copy</string>
+    <string name="save_title">Save</string>
+    <string name="saved_notice">Saved where you chose.</string>
+    <string name="error_cannot_write">That location could not be written</string>
 </resources>
