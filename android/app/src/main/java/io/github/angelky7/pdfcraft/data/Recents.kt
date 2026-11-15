@@ -115,7 +115,7 @@ class Recents(context: Context) {
 
     fun fileOf(id: String): File = File(dir, "$id.pdf")
 
-    fun exists(id: String): Boolean = fileOf(id).isLength(0)
+    fun exists(id: String): Boolean = fileOf(id).let { it.isFile && it.length() > 0 }
 
     private fun save(documents: List<RecentDoc>) {
         val array = JSONArray()
