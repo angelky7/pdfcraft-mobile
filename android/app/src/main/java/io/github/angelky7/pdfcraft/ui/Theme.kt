@@ -84,10 +84,10 @@ val PageBackground: Color
  * separately, because a green that reads on a dark block does not read on a pale one.
  */
 enum class Accent(
-    private val lightBlock: Long,
-    private val lightInk: Long,
-    private val darkBlock: Long,
-    private val darkInk: Long,
+    val lightBlock: Long,
+    val lightInk: Long,
+    val darkBlock: Long,
+    val darkInk: Long,
 ) {
     Green(0xFFCFE9DE, 0xFF17553D, 0xFF1B3B2E, 0xFF8FD3B8),
     Blue(0xFFD6E4FA, 0xFF1B4A8C, 0xFF1B2C42, 0xFF9CC7FA),

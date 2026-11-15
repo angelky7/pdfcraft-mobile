@@ -90,13 +90,13 @@ fun HomeScreen(
     val shown = if (shelf == 0) recents else recents.filter { it.id in starred }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val width = if (maxWidth > MaxContentWidth) MaxContentWidth else maxWidth
+        val columnWidth = if (maxWidth > MaxContentWidth) MaxContentWidth else maxWidth
 
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .width(width)
+                    .width(columnWidth)
                     .align(Alignment.TopCenter),
                 contentPadding = PaddingValues(bottom = 96.dp),
             ) {

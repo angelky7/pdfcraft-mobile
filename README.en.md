@@ -51,8 +51,34 @@ instead of depending on what upstream's `main` looks like today.
 - **Annotations already in the file are drawn**: the highlights, underlines, strike-throughs,
   boxes and notes somebody added in Acrobat
 - **Navigation panel**: thumbnails, the document's outline, its comments, full-text search
-- Tablets: two-column layout and a page rail at 840 dp and wider
+- Tablets: a side rail and a three-column grid at 840 dp and wider
 - Dark mode follows the system; Chinese first, English second
+
+### The shell
+
+Four tabs, one line: home finds the document, files manages the copies, tools picks the verb,
+settings changes how it feels.
+
+| Tab | What is on it |
+|---|---|
+| Home | A greeting, two swipeable cards, six tinted shortcut tiles, and Recent / Starred tabs over the list |
+| Files | The copies the app holds, their sizes and the total, the way to import another, and how to drop them |
+| Tools | A wall of cards grouped as All / Read / Edit / Convert, each one saying what it does |
+| Settings | Finger writing, page mode, theme — then version, licence and privacy |
+
+Worth saying plainly:
+
+- A row's thumbnail is **a render of page one**, drawn once when the document is imported and kept
+  as a PNG, so scrolling the list does not re-render anything and opening is not delayed by it
+- The six tiles are six verbs: open a PDF, write on it, find text, contents, comments, tools. Each
+  lands on the document rather than opening a paragraph about itself
+- A tool card **carries the intention through the picker into the reader**: tap Highlighter, choose
+  a file, and the reader opens with the highlighter in hand; Document info opens on the page
+  count, size and encryption; Save a copy opens its sheet by itself
+- Stars, progress and size are all local; a row says which page you got to, not just the name
+- On a tablet the bottom bar becomes a side rail, the tool grid goes from two columns to three,
+  and the list stops widening instead of stretching into a line
+
 
 ### Writing and marking
 

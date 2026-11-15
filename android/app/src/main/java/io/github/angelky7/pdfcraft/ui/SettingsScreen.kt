@@ -54,13 +54,13 @@ fun SettingsScreen(
     var confirmClear by remember { mutableStateOf(false) }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val width = if (maxWidth > 900.dp) 900.dp else maxWidth
+        val columnWidth = if (maxWidth > 900.dp) 900.dp else maxWidth
 
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .width(width)
+                    .width(columnWidth)
                     .align(Alignment.TopCenter),
                 contentPadding = PaddingValues(bottom = 32.dp),
             ) {

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -94,14 +95,14 @@ fun ToolsScreen(
     val shown = if (group == 0) Entries else Entries.filter { it.group == group }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val width = if (maxWidth > 900.dp) 900.dp else maxWidth
+        val columnWidth = if (maxWidth > 900.dp) 900.dp else maxWidth
 
         Box(Modifier.fillMaxSize()) {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(if (expanded) 3 else 2),
                 modifier = Modifier
                     .fillMaxHeight()
-                    .width(width)
+                    .width(columnWidth)
                     .align(Alignment.TopCenter),
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 32.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -150,9 +151,7 @@ fun ToolsScreen(
                             }
                         },
                         icon = entry.icon,
-                        glyph = entry.tool?.let { tool ->
-                            { ToolGlyph(tool, entry.accent.ink(), 24.dp) }
-                        },
+                        tool = entry.tool,
                     )
                 }
             }
