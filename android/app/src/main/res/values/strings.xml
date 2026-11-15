@@ -3,33 +3,39 @@
 <resources>
     <string name="app_name">PdfCraft</string>
 
+    <!-- Home -->
+    <string name="home_subtitle">本地阅读 · 手写批注</string>
+    <string name="home_lead">在本机阅读 PDF。文件不会离开这台设备，不需要账号，也不会上传任何内容。</string>
+    <string name="home_recent">最近打开</string>
+    <string name="home_empty_title">还没有打开过文档</string>
+    <string name="home_empty_body">选一份 PDF 开始。打开过的文档会留在这里，下次从上次读到的地方接着读。</string>
+    <string name="home_privacy">文件只在这台设备上处理：不上传、不需要账号、不联网。</string>
+    <string name="home_opening">正在打开…</string>
+    <string name="home_hint">手机与平板通用。从文件管理器、聊天附件或下载目录里选择 PDF 即可。</string>
+    <string name="recent_detail">第 %1$d 页 · 共 %2$d 页 · %3$s</string>
+
+    <!-- Actions -->
     <string name="action_open">打开 PDF</string>
     <string name="action_close">关闭文档</string>
     <string name="action_dismiss">知道了</string>
-
-    <string name="home_lead">在本机阅读 PDF。文件不会离开这台设备，不需要账号，也不会上传任何内容。</string>
-    <string name="home_opening">正在打开…</string>
-    <string name="home_hint">手机与平板通用。从文件管理器、聊天附件或下载目录里选择 PDF 即可。</string>
-
-    <string name="page_of">第 %1$d / %2$d 页</string>
-
-    <string name="error_open_title">打不开这个文件</string>
-    <string name="error_cannot_read">无法读取选中的文件</string>
-    <string name="untitled_document">未命名文档</string>
-    <string name="pen_toggle">手写批注</string>
-    <string name="pen_zoom_hint">放大状态下不能书写，请先回到 100%</string>
-    <string name="pen_black">黑色</string>
-    <string name="pen_red">红色</string>
-    <string name="pen_blue">蓝色</string>
-    <string name="pen_amber">琥珀</string>
-    <string name="pen_thin">细</string>
-    <string name="pen_medium">中</string>
-    <string name="pen_thick">粗</string>
+    <string name="action_more">更多</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_go">跳转</string>
+    <string name="action_go_to_page">跳到指定页</string>
+    <string name="action_remove_recent">从列表移除</string>
     <string name="action_undo">撤销一笔</string>
     <string name="action_save">保存副本</string>
-    <string name="save_title">保存</string>
-    <string name="saved_notice">已保存到你选择的位置。</string>
-    <string name="error_cannot_write">无法写入所选位置</string>
+    <string name="action_zoom_in">放大</string>
+    <string name="action_zoom_out">缩小</string>
+
+    <!-- Reading -->
+    <string name="page_of">第 %1$d / %2$d 页</string>
+    <string name="page_number">第 %1$d 页</string>
+    <string name="page_number_hint">页码（共 %1$d 页）</string>
+    <string name="mode_vertical">连续滚动</string>
+    <string name="mode_single">单页翻页</string>
+
+    <!-- Navigation panel -->
     <string name="panel_toggle">目录与导航</string>
     <string name="tab_thumbnails">缩略图</string>
     <string name="tab_outline">目录</string>
@@ -40,5 +46,30 @@
     <string name="search_hint">搜索文档内容</string>
     <string name="search_no_results">没有找到</string>
     <string name="search_count">共 %1$d 处</string>
-    <string name="page_number">第 %1$d 页</string>
+
+    <!-- Pen -->
+    <string name="pen_toggle">手写批注</string>
+    <string name="pen_tool_ink">笔</string>
+    <string name="pen_tool_eraser">橡皮</string>
+    <string name="pen_finger_write">手指也能写</string>
+    <string name="pen_black">黑色</string>
+    <string name="pen_red">红色</string>
+    <string name="pen_blue">蓝色</string>
+    <string name="pen_green">绿色</string>
+    <string name="pen_amber">琥珀</string>
+    <string name="pen_thin">细</string>
+    <string name="pen_medium">中</string>
+    <string name="pen_thick">粗</string>
+    <string name="pen_zoom_hint">放大状态下不能书写，请先回到 100%</string>
+
+    <!-- Save -->
+    <string name="save_title">保存</string>
+    <string name="saved_notice">已保存到你选择的位置。</string>
+
+    <!-- Errors -->
+    <string name="error_open_title">打不开这个文件</string>
+    <string name="error_cannot_read">无法读取选中的文件</string>
+    <string name="error_cannot_write">无法写入所选位置</string>
+    <string name="error_file_gone">这份文档的副本已经不在了，请重新选择文件</string>
+    <string name="untitled_document">未命名文档</string>
 </resources>

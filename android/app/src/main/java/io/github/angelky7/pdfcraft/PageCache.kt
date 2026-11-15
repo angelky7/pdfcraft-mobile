@@ -27,14 +27,21 @@ class PageCache(private val document: Document) {
     /**
      * The page at [scale] device pixels per point, rendered on first use.
      *
+     * The scale is capped at [MaxScale] rather than followed all the way up. Zooming a page to
+     * four times its fit-width means sixteen times the pixels: a portrait A4 page at that size is
+     * over 80 MB of ARGB in one bitmap, which no phone will give this app. Past the cap the same
+     * raster is shown larger — slightly soft at the deepest zoom, and the alternative is being
+     * killed for memory while zoomed in.
+     *
      * Call from a background dispatcher: this blocks for the length of a render.
      */
     fun bitmap(page: Int, scale: Float): Bitmap {
+        val capped = scale.coerceAtMost(MaxScale)
         // Hundredths of a scale step: two zooms that differ by less than 1% show the same raster.
-        val key = Key(page, (scale * 100).toInt())
+        val key = Key(page, (capped * 100).toInt())
         bitmaps.get(key)?.let { return it }
 
-        val image = document.renderPage(page, scale)
+        val image = document.renderPage(page, capped)
         require(image.width > 0 && image.height > 0) { "page $page rendered empty" }
 
         val bitmap = Bitmap.createBitmap(image.width, image.height, Bitmap.Config.ARGB_8888)
@@ -49,6 +56,14 @@ class PageCache(private val document: Document) {
     fun clear() = bitmaps.evictAll()
 
     private companion object {
+        /**
+         * Device pixels per PDF point past which a page is rendered once and scaled on screen.
+         * 2.2 is a little over twice the linear resolution of a fit-width page on a phone: sharp
+         * enough to read small print when zoomed, small enough to keep a bitmap in the tens of
+         * megabytes rather than the hundreds.
+         */
+        const val MaxScale = 2.2f
+
         /**
          * A quarter of the heap the process can use, clamped: large enough for the pages around
          * the one on screen (and a tablet's two-page spread), small enough that the parser and

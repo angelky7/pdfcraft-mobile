@@ -1,35 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- English, for a device set to anything but Chinese. -->
+<!-- English, for a device set to anything but Chinese. Kept complete: a missing string here
+     means the app says something in Chinese on an English phone. -->
 <resources>
     <string name="app_name">PdfCraft</string>
 
+    <!-- Home -->
+    <string name="home_subtitle">Reads locally · writes with a pen</string>
+    <string name="home_lead">Read PDFs on this device. Nothing is uploaded, no account is needed, and the file never leaves the phone.</string>
+    <string name="home_recent">Recent</string>
+    <string name="home_empty_title">Nothing opened yet</string>
+    <string name="home_empty_body">Pick a PDF to start. Documents you open stay here, and reopen where you stopped reading.</string>
+    <string name="home_privacy">Everything happens on this device: no upload, no account, no network.</string>
+    <string name="home_opening">Opening…</string>
+    <string name="home_hint">Phones and tablets alike. Pick a PDF from a file manager, a chat attachment, or your downloads.</string>
+    <string name="recent_detail">p. %1$d of %2$d · %3$s</string>
+
+    <!-- Actions -->
     <string name="action_open">Open a PDF</string>
     <string name="action_close">Close the document</string>
     <string name="action_dismiss">Close</string>
-
-    <string name="home_lead">Read PDFs on this device. Nothing is uploaded, no account is needed, and the file never leaves the phone.</string>
-    <string name="home_opening">Opening…</string>
-    <string name="home_hint">Phones and tablets alike. Pick a PDF from a file manager, a chat attachment, or your downloads.</string>
-
-    <string name="page_of">Page %1$d of %2$d</string>
-
-    <string name="error_open_title">This file could not be opened</string>
-    <string name="error_cannot_read">The selected file could not be read</string>
-    <string name="untitled_document">Untitled document</string>
-    <string name="pen_toggle">Write on the page</string>
-    <string name="pen_zoom_hint">Zoomed in, the page cannot be written on. Go back to 100% first.</string>
-    <string name="pen_black">Black</string>
-    <string name="pen_red">Red</string>
-    <string name="pen_blue">Blue</string>
-    <string name="pen_amber">Amber</string>
-    <string name="pen_thin">Thin</string>
-    <string name="pen_medium">Medium</string>
-    <string name="pen_thick">Thick</string>
+    <string name="action_more">More</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_go">Go</string>
+    <string name="action_go_to_page">Go to page</string>
+    <string name="action_remove_recent">Remove from the list</string>
     <string name="action_undo">Undo the last stroke</string>
     <string name="action_save">Save a copy</string>
-    <string name="save_title">Save</string>
-    <string name="saved_notice">Saved where you chose.</string>
-    <string name="error_cannot_write">That location could not be written</string>
+    <string name="action_zoom_in">Zoom in</string>
+    <string name="action_zoom_out">Zoom out</string>
+
+    <!-- Reading -->
+    <string name="page_of">Page %1$d of %2$d</string>
+    <string name="page_number">Page %1$d</string>
+    <string name="page_number_hint">Page number (of %1$d)</string>
+    <string name="mode_vertical">Continuous</string>
+    <string name="mode_single">One page at a time</string>
+
+    <!-- Navigation panel -->
     <string name="panel_toggle">Contents and navigation</string>
     <string name="tab_thumbnails">Pages</string>
     <string name="tab_outline">Contents</string>
@@ -40,5 +47,30 @@
     <string name="search_hint">Search the document</string>
     <string name="search_no_results">Nothing found</string>
     <string name="search_count">%1$d matches</string>
-    <string name="page_number">Page %1$d</string>
+
+    <!-- Pen -->
+    <string name="pen_toggle">Write on the page</string>
+    <string name="pen_tool_ink">Pen</string>
+    <string name="pen_tool_eraser">Eraser</string>
+    <string name="pen_finger_write">Finger writes too</string>
+    <string name="pen_black">Black</string>
+    <string name="pen_red">Red</string>
+    <string name="pen_blue">Blue</string>
+    <string name="pen_green">Green</string>
+    <string name="pen_amber">Amber</string>
+    <string name="pen_thin">Thin</string>
+    <string name="pen_medium">Medium</string>
+    <string name="pen_thick">Thick</string>
+    <string name="pen_zoom_hint">Zoomed in, the page cannot be written on. Go back to 100% first.</string>
+
+    <!-- Save -->
+    <string name="save_title">Save</string>
+    <string name="saved_notice">Saved where you chose.</string>
+
+    <!-- Errors -->
+    <string name="error_open_title">This file could not be opened</string>
+    <string name="error_cannot_read">The selected file could not be read</string>
+    <string name="error_cannot_write">That location could not be written</string>
+    <string name="error_file_gone">The app no longer has a copy of this document. Pick the file again.</string>
+    <string name="untitled_document">Untitled document</string>
 </resources>

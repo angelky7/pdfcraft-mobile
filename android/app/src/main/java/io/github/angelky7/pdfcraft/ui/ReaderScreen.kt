@@ -7,10 +7,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -22,32 +22,42 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -57,15 +67,17 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -84,7 +96,9 @@ import io.github.angelky7.pdfcraft.R
 import io.github.angelky7.pdfcraft.ink.InkOverlay
 import io.github.angelky7.pdfcraft.ink.InkStore
 import io.github.angelky7.pdfcraft.ink.PenHandler
+import io.github.angelky7.pdfcraft.ink.PenTool
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.pdfcraft_mobile.Document
@@ -93,64 +107,98 @@ import uniffi.pdfcraft_mobile.PageInk
 import uniffi.pdfcraft_mobile.PageSize
 import java.io.File
 
-/** The width at which a window gets the tablet treatment: Android's "expanded" size class. */
+/** How pages are laid out. */
+enum class ReadMode {
+    /** Pages down one column: how a phone reads a document. */
+    Vertical,
+
+    /** One page at a time, swiped sideways: how a tablet reads one. */
+    Single,
+}
+
+/** The width at which a window gets the tablet layout. */
 private val ExpandedWidth = 840.dp
 
-/** What the toolbar offers: four inks and three widths, each with its spoken name. */
-private val PenColors = listOf(
-    Color(0xFF14181A) to R.string.pen_black,
-    Color(0xFFB3261E) to R.string.pen_red,
-    Color(0xFF1A4FB4) to R.string.pen_blue,
-    Color(0xFFB8860B) to R.string.pen_amber,
-)
-private val PenWidths = listOf(
-    1.0f to R.string.pen_thin,
-    2.5f to R.string.pen_medium,
-    5.5f to R.string.pen_thick,
-)
+/** How far a page may be enlarged from fit-width. */
+private const val MaxZoom = 3.0f
 
 /**
- * Reading a document: pages down a scrolling column, pinch to zoom, and on a tablet a rail of
- * pages beside them. A stylus writes on the pages while a finger keeps scrolling them.
+ * Reading a document.
  *
- * Pages are rendered only as they are scrolled to, and each keeps the raster it was drawn at, so
+ * Pages are laid out from their own geometry and each is rendered only as it is reached, so
  * opening a 900-page manual is immediate and memory follows the reader rather than the document.
+ * Everything that maps a touch to the page — writing, erasing — works in page-relative
+ * coordinates, which is why a zoom is applied to the page's *width* rather than to the finished
+ * picture: the page keeps being laid out, so its scroll range stays right, its text stays sharp,
+ * and a stroke lands where the tip was even at 3×.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReaderScreen(opened: OpenedDocument, onClose: () -> Unit) {
+fun ReaderScreen(
+    opened: OpenedDocument,
+    onProgress: (page: Int, total: Int) -> Unit,
+    onClose: () -> Unit,
+) {
     val document = opened.document
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
     val pages = remember(document) { document.pages() }
     val cache = remember(document) { PageCache(document) }
     val ink = remember(document) { InkStore() }
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
 
+    val start = opened.startPage.coerceIn(0, (pages.size - 1).coerceAtLeast(0))
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = start)
+    val pagerState = rememberPagerState(initialPage = start) { pages.size }
+
+    var mode by remember { mutableStateOf(ReadMode.Vertical) }
     var zoom by remember { mutableFloatStateOf(1f) }
-    var pan by remember { mutableStateOf(Offset.Zero) }
-    var toolbarOpen by remember { mutableStateOf(false) }
-    var panelTab by remember { mutableStateOf<NavTab?>(null) }
+    var writing by remember { mutableStateOf(false) }
+    var tool by remember { mutableStateOf(PenTool.Ink) }
     var penColor by remember { mutableStateOf(PenColors.first().first) }
     var penWidth by remember { mutableFloatStateOf(PenWidths[1].first) }
+    var allowFinger by remember { mutableStateOf(false) }
+    var panelTab by remember { mutableStateOf<NavTab?>(null) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var goToOpen by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
 
-    val currentPage by remember { derivedStateOf { listState.firstVisibleItemIndex } }
+    val currentPage by remember(mode) {
+        derivedStateOf {
+            if (mode == ReadMode.Vertical) {
+                listState.firstVisibleItemIndex
+            } else {
+                pagerState.currentPage
+            }
+        }
+    }
 
     DisposableEffect(document) {
         onDispose { cache.clear() }
     }
 
-    val transform = rememberTransformableState { zoomChange, panChange, _ ->
-        val next = (zoom * zoomChange).coerceIn(1f, 4f)
-        pan = if (next > 1f) pan + panChange else Offset.Zero
-        zoom = next
+    // Remember where the reader is, after they have stopped moving: a flick through sixty pages
+    // should leave one write behind, not sixty.
+    LaunchedEffect(currentPage, pages.size) {
+        if (pages.isEmpty()) return@LaunchedEffect
+        delay(700)
+        onProgress(currentPage, pages.size)
     }
 
-    // Saving goes through the system picker so the original file is never touched: the reader
-    // writes a new PDF wherever the user chooses, as Acrobat's "Save a copy" does.
-    val savePicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { target: Uri? ->
+    fun goTo(page: Int) {
+        val target = page.coerceIn(0, (pages.size - 1).coerceAtLeast(0))
+        if (mode == ReadMode.Vertical) {
+            scope.launch { listState.scrollToItem(target) }
+        } else {
+            scope.launch { pagerState.scrollToPage(target) }
+        }
+    }
+
+    // Saving goes through the system picker so the original file is never touched.
+    val savePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf"),
+    ) { target: Uri? ->
         if (target == null) return@rememberLauncherForActivityResult
         saving = true
         scope.launch {
@@ -164,161 +212,202 @@ fun ReaderScreen(opened: OpenedDocument, onClose: () -> Unit) {
         }
     }
 
-    Scaffold(
-        containerColor = PageBackground,
-        topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                ),
-                navigationIcon = {
-                    IconButton(onClick = onClose) {
-                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_close))
-                    }
-                },
-                title = {
-                    Column {
+    Column(Modifier.fillMaxSize().background(PageBackground)) {
+        TopAppBar(
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                titleContentColor = MaterialTheme.colorScheme.onSurface,
+            ),
+            navigationIcon = {
+                IconButton(onClick = onClose) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.action_close),
+                    )
+                }
+            },
+            title = {
+                Column {
+                    Text(
+                        text = document.title()?.takeIf { it.isNotBlank() } ?: opened.displayName,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (pages.isNotEmpty()) {
                         Text(
-                            text = document.title()?.takeIf { it.isNotBlank() } ?: opened.displayName,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            text = stringResource(R.string.page_of, currentPage + 1, pages.size),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        if (pages.isNotEmpty()) {
-                            Text(
-                                text = stringResource(R.string.page_of, currentPage + 1, pages.size),
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
                     }
-                },
-                actions = {
-                    IconButton(onClick = { panelTab = NavTab.Thumbnails }) {
+                }
+            },
+            actions = {
+                IconButton(onClick = { panelTab = NavTab.Thumbnails }) {
+                    Icon(
+                        Icons.Filled.Menu,
+                        contentDescription = stringResource(R.string.panel_toggle),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(
+                    onClick = {
+                        writing = !writing
+                        if (writing) zoom = 1f
+                    },
+                ) {
+                    Icon(
+                        Icons.Filled.Edit,
+                        contentDescription = stringResource(R.string.pen_toggle),
+                        tint = if (writing) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
                         Icon(
-                            Icons.Filled.Menu,
-                            contentDescription = stringResource(R.string.panel_toggle),
+                            Icons.Filled.MoreVert,
+                            contentDescription = stringResource(R.string.action_more),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    IconButton(onClick = { toolbarOpen = !toolbarOpen }) {
-                        Icon(
-                            Icons.Filled.Edit,
-                            contentDescription = stringResource(R.string.pen_toggle),
-                            tint = if (toolbarOpen) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.mode_vertical)) },
+                            trailingIcon = { if (mode == ReadMode.Vertical) Check() },
+                            onClick = {
+                                mode = ReadMode.Vertical
+                                menuOpen = false
+                                scope.launch { listState.scrollToItem(pagerState.currentPage) }
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.mode_single)) },
+                            trailingIcon = { if (mode == ReadMode.Single) Check() },
+                            onClick = {
+                                mode = ReadMode.Single
+                                menuOpen = false
+                                scope.launch { pagerState.scrollToPage(listState.firstVisibleItemIndex) }
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_go_to_page)) },
+                            onClick = {
+                                menuOpen = false
+                                goToOpen = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_save)) },
+                            onClick = {
+                                menuOpen = false
+                                savePicker.launch(opened.displayName)
                             },
                         )
                     }
-                    if (zoom > 1f) {
-                        Text(
-                            text = "${(zoom * 100).toInt()}%",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(end = 12.dp),
-                        )
-                    }
-                },
-            )
-        },
-    ) { insets ->
-        Box(Modifier.fillMaxSize()) {
-            BoxWithConstraints(
-                Modifier
-                    .fillMaxSize()
-                    .padding(insets),
-            ) {
-            val expanded = maxWidth >= ExpandedWidth
-
-            Row(Modifier.fillMaxSize()) {
-                if (expanded && pages.isNotEmpty()) {
-                    PageRail(
-                        pages = pages,
-                        current = currentPage,
-                        onSelect = { index -> scope.launch { listState.scrollToItem(index) } },
-                    )
-                    VerticalDivider(
-                        modifier = Modifier.fillMaxHeight().width(1.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                    )
                 }
+            },
+        )
 
-                Box(Modifier.weight(1f)) {
-                    BoxWithConstraints(Modifier.fillMaxSize()) {
-                        val margin = if (expanded) 28.dp else 10.dp
-                        val pageWidth = maxWidth - margin * 2
+        Box(Modifier.weight(1f)) {
+            when (mode) {
+                ReadMode.Vertical -> VerticalReader(
+                    document = document,
+                    cache = cache,
+                    pages = pages,
+                    listState = listState,
+                    zoom = zoom,
+                    ink = ink,
+                    writing = writing,
+                    tool = tool,
+                    penColor = penColor,
+                    penWidth = penWidth,
+                    allowFinger = allowFinger,
+                    onZoomBy = { factor -> zoom = (zoom * factor).coerceIn(1f, MaxZoom) },
+                    onDoubleTap = { zoom = if (zoom > 1f) 1f else 2f },
+                )
 
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer(
-                                    scaleX = zoom,
-                                    scaleY = zoom,
-                                    translationX = pan.x,
-                                    translationY = pan.y,
-                                )
-                                .transformable(transform),
-                            contentPadding = PaddingValues(horizontal = margin, vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            items(count = pages.size, key = { it }) { index ->
-                                PageImage(
-                                    document = document,
-                                    cache = cache,
-                                    index = index,
-                                    page = pages[index],
-                                    width = pageWidth,
-                                    ink = ink,
-                                    penColor = penColor,
-                                    penWidth = penWidth,
-                                    // The zoom is a draw-time scale, so while it is on the pen's
-                                    // coordinates no longer line up with what is under its tip.
-                                    // Writing is therefore a 1:1 activity, as on paper.
-                                    writable = zoom == 1f,
-                                )
-                            }
-                        }
-                    }
+                ReadMode.Single -> SingleReader(
+                    document = document,
+                    cache = cache,
+                    pages = pages,
+                    pagerState = pagerState,
+                    zoom = zoom,
+                    ink = ink,
+                    writing = writing,
+                    tool = tool,
+                    penColor = penColor,
+                    penWidth = penWidth,
+                    allowFinger = allowFinger,
+                    onZoomBy = { factor -> zoom = (zoom * factor).coerceIn(1f, MaxZoom) },
+                )
+            }
 
+            // The controls float over the page rather than taking a strip of their own: turning
+            // writing on should not shrink the document being written on.
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+            ) {
+                if (writing) {
                     InkToolbar(
-                        open = toolbarOpen,
                         color = penColor,
                         onColor = { penColor = it },
                         width = penWidth,
                         onWidth = { penWidth = it },
+                        tool = tool,
+                        onTool = { tool = it },
+                        allowFinger = allowFinger,
+                        onAllowFinger = { allowFinger = it },
                         canUndo = !ink.isEmpty(),
                         saving = saving,
                         onUndo = { ink.undo() },
                         onSave = { savePicker.launch(opened.displayName) },
-                        writable = zoom == 1f,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(horizontal = 12.dp, vertical = 16.dp),
+                    )
+                } else {
+                    PageBar(
+                        page = currentPage + 1,
+                        total = pages.size,
+                        zoom = zoom,
+                        onZoom = { zoom = it },
+                        onSeek = { goTo(it) },
                     )
                 }
             }
-            }
-
-            panelTab?.let { tab ->
-                NavPanel(
-                    document = document,
-                    pages = pages,
-                    cache = cache,
-                    currentPage = currentPage,
-                    initialTab = tab,
-                    onJump = { page ->
-                        panelTab = null
-                        scope.launch { listState.scrollToItem(page.coerceIn(0, (pages.size - 1).coerceAtLeast(0))) }
-                    },
-                    onDismiss = { panelTab = null },
-                )
-            }
         }
+    }
+
+    panelTab?.let { tab ->
+        NavPanel(
+            document = document,
+            pages = pages,
+            cache = cache,
+            currentPage = currentPage,
+            initialTab = tab,
+            onJump = { page ->
+                panelTab = null
+                goTo(page)
+            },
+            onDismiss = { panelTab = null },
+        )
+    }
+
+    if (goToOpen) {
+        GoToPageDialog(
+            total = pages.size,
+            onGo = {
+                goToOpen = false
+                goTo(it)
+            },
+            onDismiss = { goToOpen = false },
+        )
     }
 
     notice?.let { message ->
@@ -333,6 +422,428 @@ fun ReaderScreen(opened: OpenedDocument, onClose: () -> Unit) {
             },
         )
     }
+}
+
+/** A tick in a menu: the mark of the option already in force. */
+@Composable
+private fun Check() {
+    Icon(
+        Icons.Filled.Check,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.size(17.dp),
+    )
+}
+
+/**
+ * Pages down one column.
+ *
+ * The zoom widens the column instead of magnifying the finished picture, so the list scrolls the
+ * document as it now is: at 2× the reader scrolls through twice the page, sees twice the detail,
+ * and the page is rendered at the pixels it occupies rather than blown up from a smaller raster.
+ */
+@Composable
+private fun VerticalReader(
+    document: Document,
+    cache: PageCache,
+    pages: List<PageSize>,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    zoom: Float,
+    ink: InkStore,
+    writing: Boolean,
+    tool: PenTool,
+    penColor: Color,
+    penWidth: Float,
+    allowFinger: Boolean,
+    onZoomBy: (Float) -> Unit,
+    onDoubleTap: () -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val expanded = maxWidth >= ExpandedWidth
+        val margin = if (expanded) 28.dp else 10.dp
+        val fitWidth = (maxWidth - margin * 2).coerceAtLeast(80.dp)
+        val pageWidth = fitWidth * zoom
+        val columnWidth = if (pageWidth + margin * 2 > maxWidth) pageWidth + margin * 2 else maxWidth
+
+        val horizontal = rememberScrollState()
+
+        Box(
+            Modifier
+                .fillMaxSize()
+                .horizontalScroll(horizontal)
+                .pointerInputDoubleTap(!writing, onDoubleTap)
+                .pinchZoom(!writing, onZoomBy),
+        ) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .width(columnWidth)
+                    .fillMaxHeight(),
+                contentPadding = PaddingValues(horizontal = margin, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(count = pages.size, key = { it }) { index ->
+                    PageView(
+                        document = document,
+                        cache = cache,
+                        index = index,
+                        page = pages[index],
+                        width = pageWidth,
+                        ink = ink,
+                        writing = writing,
+                        tool = tool,
+                        color = penColor,
+                        widthPt = penWidth,
+                        allowFinger = allowFinger,
+                    )
+                }
+                item { Spacer(Modifier.height(72.dp)) }
+            }
+        }
+    }
+}
+
+/** One page at a time, swiped sideways; a page taller than the window still scrolls down. */
+@Composable
+private fun SingleReader(
+    document: Document,
+    cache: PageCache,
+    pages: List<PageSize>,
+    pagerState: androidx.compose.foundation.pager.PagerState,
+    zoom: Float,
+    ink: InkStore,
+    writing: Boolean,
+    tool: PenTool,
+    penColor: Color,
+    penWidth: Float,
+    allowFinger: Boolean,
+    onZoomBy: (Float) -> Unit,
+) {
+    if (pages.isEmpty()) return
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val expanded = maxWidth >= ExpandedWidth
+        val margin = if (expanded) 28.dp else 12.dp
+        val fitWidth = (maxWidth - margin * 2).coerceAtLeast(80.dp)
+        val pageWidth = fitWidth * zoom
+        val horizontal = rememberScrollState()
+
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = margin),
+            pageSpacing = 12.dp,
+        ) { index ->
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .horizontalScroll(horizontal)
+                    .pinchZoom(!writing, onZoomBy),
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                Column(
+                    Modifier
+                        .width(pageWidth)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    PageView(
+                        document = document,
+                        cache = cache,
+                        index = index,
+                        page = pages[index],
+                        width = pageWidth,
+                        ink = ink,
+                        writing = writing,
+                        tool = tool,
+                        color = penColor,
+                        widthPt = penWidth,
+                        allowFinger = allowFinger,
+                    )
+                    Spacer(Modifier.height(96.dp))
+                }
+            }
+        }
+    }
+}
+
+/** Double-tap toggles the zoom, except while writing: there a tap is a dot on the page. */
+private fun Modifier.pointerInputDoubleTap(enabled: Boolean, onDoubleTap: () -> Unit): Modifier =
+    if (!enabled) {
+        this
+    } else {
+        this.pointerInput(Unit) { detectTapGestures(onDoubleTap = { onDoubleTap() }) }
+    }
+
+/**
+ * Two fingers zoom the page.
+ *
+ * Watched on the initial pass so the scrolling list underneath does not see the gesture too:
+ * otherwise a pinch both zooms and scrolls, and the page slides out from under the fingers doing
+ * the pinching. A single finger is never consumed here, which is what keeps dragging on a page
+ * scrolling the document.
+ *
+ * The factor is relative rather than absolute so a frame that arrives late cannot make the zoom
+ * jump: each event multiplies what is on screen by how much the fingers moved since the last one.
+ */
+@Composable
+private fun Modifier.pinchZoom(enabled: Boolean, onZoomBy: (Float) -> Unit): Modifier {
+    val callback by rememberUpdatedState(onZoomBy)
+    return if (!enabled) {
+        this
+    } else {
+        this.pointerInput(Unit) {
+            awaitEachGesture {
+                var previous = 0f
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val pressed = event.changes.filter { it.pressed }
+                    if (pressed.size >= 2) {
+                        val distance = (pressed[0].position - pressed[1].position).getDistance()
+                        if (previous > 0f && distance > 0f) callback(distance / previous)
+                        previous = distance
+                        pressed.forEach { it.consume() }
+                    } else {
+                        previous = 0f
+                        if (pressed.isEmpty()) break
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One page: its raster once rendered, its ink on top, and a spinner until the raster arrives.
+ *
+ * [width] is the page's width on screen, and it is the only thing a zoom changes — which is what
+ * keeps the pen honest. The touch handler divides by exactly this width, so a stroke is stored in
+ * page coordinates whether the page is at fit-width or at three times that.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun PageView(
+    document: Document,
+    cache: PageCache,
+    index: Int,
+    page: PageSize,
+    width: Dp,
+    ink: InkStore,
+    writing: Boolean,
+    tool: PenTool,
+    color: Color,
+    widthPt: Float,
+    allowFinger: Boolean,
+) {
+    val density = LocalDensity.current.density
+    val height = width * (page.height / page.width)
+
+    // A page is drawn at the pixels the slot actually occupies, so it is sharp at 1× without
+    // being decoded at print resolution. The cache caps the scale; see PageCache.
+    val scale = (width.value * density) / page.width
+
+    var bitmap by remember(index, scale) { mutableStateOf<Bitmap?>(null) }
+
+    LaunchedEffect(index, scale) {
+        bitmap = withContext(Dispatchers.IO) {
+            runCatching { cache.bitmap(index, scale) }.getOrNull()
+        }
+    }
+
+    val strokes = ink.strokes(index)
+    val handler = remember(index, tool, color, widthPt, allowFinger) {
+        PenHandler(
+            color = color,
+            widthPt = widthPt,
+            allowFinger = allowFinger,
+            tool = tool,
+            onStroke = { stroke -> ink.add(index, stroke) },
+            onErase = { x, y -> ink.eraseNear(index, x, y, radius = 0.012f) },
+        )
+    }
+
+    val widthPx = with(LocalDensity.current) { width.toPx() }.toInt()
+    val heightPx = with(LocalDensity.current) { height.toPx() }.toInt()
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height),
+        shape = RoundedCornerShape(3.dp),
+        color = Color.White,
+        shadowElevation = 2.dp,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (!writing) {
+                        Modifier
+                    } else {
+                        Modifier.pointerInteropFilter { event -> handler.onEvent(event, widthPx, heightPx) }
+                    },
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            val drawn = bitmap
+            if (drawn != null) {
+                Image(
+                    bitmap = drawn.asImageBitmap(),
+                    contentDescription = stringResource(R.string.page_of, index + 1, document.pageCount()),
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit,
+                )
+            } else {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+            }
+
+            InkOverlay(strokes = strokes, pageWidthPt = page.width, modifier = Modifier.fillMaxSize())
+        }
+    }
+}
+
+/**
+ * The bar at the bottom of the pages: where the reader is, a way to slide there, and the zoom.
+ *
+ * It is one line and it floats, so the page it describes is not shortened by it. The slider is
+ * the fastest way through a long document on a phone, where the thumbnail panel is a detour.
+ */
+@Composable
+private fun PageBar(
+    page: Int,
+    total: Int,
+    zoom: Float,
+    onZoom: (Float) -> Unit,
+    onSeek: (Int) -> Unit,
+) {
+    var dragged by remember { mutableStateOf(false) }
+    var position by remember { mutableFloatStateOf((page - 1).toFloat()) }
+
+    LaunchedEffect(page, total) {
+        if (!dragged) position = (page - 1).toFloat()
+    }
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 3.dp,
+        shadowElevation = 8.dp,
+        modifier = Modifier.widthIn(max = 520.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "$page / $total",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.widthIn(min = 52.dp),
+            )
+
+            Slider(
+                value = position.coerceIn(0f, (total - 1).coerceAtLeast(0).toFloat()),
+                onValueChange = {
+                    dragged = true
+                    position = it
+                },
+                onValueChangeFinished = {
+                    dragged = false
+                    onSeek(position.toInt())
+                },
+                valueRange = 0f..(total - 1).coerceAtLeast(0).toFloat(),
+                enabled = total > 1,
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            )
+
+            ZoomButton(
+                enabled = zoom > 1f,
+                label = stringResource(R.string.action_zoom_out),
+                onClick = { onZoom((zoom / 1.5f).coerceAtLeast(1f)) },
+            ) {
+                Icon(Icons.Filled.Remove, contentDescription = null, modifier = Modifier.size(17.dp))
+            }
+            Text(
+                text = "${(zoom * 100).toInt()}%",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .widthIn(min = 38.dp)
+                    .clickable { onZoom(1f) },
+            )
+            ZoomButton(
+                enabled = zoom < MaxZoom,
+                label = stringResource(R.string.action_zoom_in),
+                onClick = { onZoom((zoom * 1.5f).coerceAtMost(MaxZoom)) },
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(17.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ZoomButton(
+    enabled: Boolean,
+    label: String,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val tint = if (enabled) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+    }
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .clickable(enabled = enabled, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.material3.LocalContentColor provides tint,
+        ) { content() }
+    }
+}
+
+/** Ask for a page number, for when the reader knows where they want to be. */
+@Composable
+private fun GoToPageDialog(total: Int, onGo: (Int) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.action_go_to_page)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { input -> text = input.filter { it.isDigit() }.take(6) },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.page_number_hint, total)) },
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { text.toIntOrNull()?.let { onGo(it - 1) } ?: onDismiss() },
+                enabled = text.toIntOrNull()?.let { it in 1..total } == true,
+            ) {
+                Text(stringResource(R.string.action_go))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
 }
 
 /**
@@ -361,235 +872,4 @@ private fun writeInkedCopy(document: Document, ink: InkStore, context: Context, 
     context.contentResolver.openOutputStream(target)?.use { out ->
         exported.inputStream().use { input -> input.copyTo(out, bufferSize = 1 shl 16) }
     } ?: error(context.getString(R.string.error_cannot_write))
-}
-
-/** One page: its raster once rendered, its ink on top, and a spinner until the raster arrives. */
-@OptIn(ExperimentalComposeUiApi::class)
-@Composable
-private fun PageImage(
-    document: Document,
-    cache: PageCache,
-    index: Int,
-    page: PageSize,
-    width: Dp,
-    ink: InkStore,
-    penColor: Color,
-    penWidth: Float,
-    writable: Boolean,
-) {
-    val density = LocalDensity.current.density
-    val height = width * (page.height / page.width)
-
-    // A page is drawn at the pixels the slot actually occupies, so it is sharp at 1× without
-    // being decoded at print resolution.
-    val scale = (width.value * density) / page.width
-
-    var bitmap by remember(index, scale) { mutableStateOf<Bitmap?>(null) }
-
-    LaunchedEffect(index, scale) {
-        bitmap = withContext(Dispatchers.IO) {
-            runCatching { cache.bitmap(index, scale) }.getOrNull()
-        }
-    }
-
-    val strokes = ink.strokes(index)
-    val handler = remember(index, penColor, penWidth) {
-        PenHandler(
-            color = penColor,
-            widthPt = penWidth,
-            onStroke = { stroke -> ink.add(index, stroke) },
-            onErase = { x, y -> ink.eraseNear(index, x, y, radius = 0.015f) },
-        )
-    }
-
-    val widthPx = with(LocalDensity.current) { width.toPx() }.toInt()
-    val heightPx = with(LocalDensity.current) { height.toPx() }.toInt()
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(height),
-        shape = RoundedCornerShape(2.dp),
-        color = Color.White,
-        shadowElevation = 1.dp,
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInteropFilter { event ->
-                    // While zoomed, the pen belongs to the reader rather than the writer.
-                    if (!writable) false else handler.onEvent(event, widthPx, heightPx)
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            val drawn = bitmap
-            if (drawn != null) {
-                Image(
-                    bitmap = drawn.asImageBitmap(),
-                    contentDescription = stringResource(R.string.page_of, index + 1, document.pageCount()),
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit,
-                )
-            } else {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(22.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.outline,
-                )
-            }
-
-            InkOverlay(strokes = strokes, pageWidthPt = page.width, modifier = Modifier.fillMaxSize())
-        }
-    }
-}
-
-/** The page rail on a tablet: every page's label, the current one marked. */
-@Composable
-private fun PageRail(pages: List<PageSize>, current: Int, onSelect: (Int) -> Unit) {
-    LazyColumn(
-        modifier = Modifier
-            .width(168.dp)
-            .fillMaxHeight()
-            .background(MaterialTheme.colorScheme.surface),
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        items(count = pages.size) { index ->
-            val selected = index == current
-            Surface(
-                onClick = { onSelect(index) },
-                shape = RoundedCornerShape(8.dp),
-                color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    text = pages[index].label,
-                    fontSize = 13.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                )
-            }
-        }
-    }
-}
-
-/**
- * The pen's controls: four colours, three widths, undo, and save.
- *
- * It floats over the bottom of the page rather than taking a strip of its own, so turning writing
- * on does not shrink the page the reader is reading.
- */
-@Composable
-private fun InkToolbar(
-    open: Boolean,
-    color: Color,
-    onColor: (Color) -> Unit,
-    width: Float,
-    onWidth: (Float) -> Unit,
-    canUndo: Boolean,
-    saving: Boolean,
-    onUndo: () -> Unit,
-    onSave: () -> Unit,
-    writable: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    if (!open) return
-
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 4.dp,
-        shadowElevation = 8.dp,
-    ) {
-        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-            if (!writable) {
-                Text(
-                    text = stringResource(R.string.pen_zoom_hint),
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
-                )
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                PenColors.forEach { (swatch, name) ->
-                    val chosen = swatch == color
-                    val label = stringResource(name)
-                    Box(
-                        Modifier
-                            .size(26.dp)
-                            .background(swatch, CircleShape)
-                            .border(
-                                width = if (chosen) 2.5.dp else 0.dp,
-                                color = if (chosen) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                shape = CircleShape,
-                            )
-                            .clickable { onColor(swatch) }
-                            .semantics { contentDescription = label },
-                    )
-                }
-
-                Spacer(Modifier.width(4.dp))
-                VerticalDivider(Modifier.height(22.dp), color = MaterialTheme.colorScheme.surfaceVariant)
-                Spacer(Modifier.width(4.dp))
-
-                PenWidths.forEach { (size, name) ->
-                    val chosen = size == width
-                    val label = stringResource(name)
-                    Box(
-                        modifier = Modifier
-                            .size(30.dp)
-                            .background(
-                                if (chosen) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                CircleShape,
-                            )
-                            .clickable { onWidth(size) }
-                            .semantics { contentDescription = label },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Box(
-                            Modifier
-                                .size((size * 2.8f).dp.coerceAtMost(15.dp))
-                                .background(color, CircleShape),
-                        )
-                    }
-                }
-
-                Spacer(Modifier.width(4.dp))
-                VerticalDivider(Modifier.height(22.dp), color = MaterialTheme.colorScheme.surfaceVariant)
-
-                IconButton(onClick = onUndo, enabled = canUndo) {
-                    Icon(
-                        Icons.Filled.Undo,
-                        contentDescription = stringResource(R.string.action_undo),
-                        tint = if (canUndo) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                        },
-                    )
-                }
-
-                IconButton(onClick = onSave, enabled = !saving) {
-                    if (saving) {
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(
-                            Icons.Filled.Save,
-                            contentDescription = stringResource(R.string.action_save),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-            }
-        }
-    }
 }
