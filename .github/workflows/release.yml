@@ -57,16 +57,29 @@ jobs:
           # The target directory is the Android one, not the host's.
           workspaces: ". -> target"
 
-      - uses: android-actions/setup-android@v3
-
-      - name: Install the NDK
+      # The runner image ships an Android SDK with several NDKs. Use what is there and install
+      # the one this project targets only when it is missing: the setup-android action fails on
+      # current images looking for a `tools` package that no longer exists in the repository.
+      - name: Android SDK
         run: |
           set -euo pipefail
-          version="27.2.12479018"
-          if [ ! -d "$ANDROID_HOME/ndk/$version" ]; then
-            yes | sdkmanager --install "ndk;$version" >/dev/null
+          sdk="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$sdk" >>"$GITHUB_ENV"
+
+          sdkmanager="$(ls -d "$sdk"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1 || true)"
+          needs=()
+          [ -d "$sdk/platforms/android-35" ]   || needs+=("platforms;android-35")
+          [ -d "$sdk/build-tools/35.0.0" ]     || needs+=("build-tools;35.0.0")
+          [ -d "$sdk/ndk/27.2.12479018" ]      || needs+=("ndk;27.2.12479018")
+          if [ ${#needs[@]} -gt 0 ]; then
+            test -n "$sdkmanager" || { echo "::error::sdkmanager not found under $sdk"; exit 1; }
+            yes | "$sdkmanager" --licenses >/dev/null 2>&1 || true
+            yes | "$sdkmanager" --install "${needs[@]}" >/dev/null
           fi
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$version" >>"$GITHUB_ENV"
+
+          echo "ANDROID_NDK_HOME=$sdk/ndk/27.2.12479018" >>"$GITHUB_ENV"
+          echo "Build tools: $(ls -1 "$sdk/build-tools" | sort -V | tail -1)"
+          echo "NDKs: $(ls -1 "$sdk/ndk" 2>/dev/null | tr '\n' ' ')"
 
       - uses: taiki-e/install-action@v2
         with:
@@ -112,7 +125,8 @@ jobs:
           set -euo pipefail
           apk="android/app/build/outputs/apk/release/app-release.apk"
           test -f "$apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk"
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)"
+          "$apksigner" verify --print-certs "$apk"
           mkdir -p dist
           cp "$apk" "dist/pdfcraft-${PDFCRAFT_ABIS}-${{ steps.v.outputs.version }}.apk"
           ls -l dist
